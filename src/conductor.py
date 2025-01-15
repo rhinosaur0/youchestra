@@ -43,7 +43,7 @@ class Conductor:
             else:
                 continue
             
-
+            print(self.solo_pitch_history)
             soloist_progression, predicted_speed = dtw_pitch_alignment_with_speed(self.solo_pitch_history, solo_pitch_reference, accompanist_progression)
             print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}')
             

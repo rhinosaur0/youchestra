@@ -28,7 +28,7 @@ def parse_midi(midi_path):
                 track_events.append((current_time, pitches, duration))
             
             current_time += duration
-            current_time = round(current_time, 4)
+            current_time = round(current_time, 8)
         
         events += track_events
 
