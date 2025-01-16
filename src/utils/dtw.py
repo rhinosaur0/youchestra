@@ -55,6 +55,7 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
 
     alignment_path.reverse()  # Start-to-end order
 
+    print(alignment_path)
 
     # Get the reference time aligned to the last user note
     last_user_idx, last_ref_idx = alignment_path[-1]
