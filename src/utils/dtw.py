@@ -4,7 +4,6 @@ from utils.lin_reg import train_linear_regression, predict_tempo_with_linear_reg
 
 def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment_progress, pitch_threshold=2.0):
     import numpy as np
-
     predicted_speed = 1.0
     pitch_reference = [(round(x[0], 2), x[1][0]) for x in pitch_reference]
     pitch_history = [(round(x[0], 2), x[1] + 12) for x in pitch_history]

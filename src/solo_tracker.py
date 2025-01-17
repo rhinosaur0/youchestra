@@ -17,7 +17,7 @@ class SoloTracker:
 
         self.running = False
         self.pitches = queue.Queue()
-        self.prev_onset = None
+        self.prev_onset = 0
         self.onset = False
         self.confidences = []
 
@@ -33,8 +33,9 @@ class SoloTracker:
             samples = np.fromstring(data,dtype=aubio.float_type)        
             pitch = (self.pitch_detector(samples)[0])
             confidence = self.pitch_detector.get_confidence()
+            energy = np.sqrt(np.mean(samples**2))
 
-            if pitch > 0 and confidence > 0.8:
+            if pitch > 0 and energy > 0.03 and confidence > 0.8:
                 self.pitches.put(pitch)
                 confidence = self.pitch_detector.get_confidence()
                 self.confidences += [confidence]
