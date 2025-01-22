@@ -2,7 +2,7 @@ import numpy as np
 from utils.lin_reg import train_linear_regression, predict_tempo_with_linear_regression
 
 
-def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment_progress, pitch_threshold=2.0):
+def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment_progress, pitch_threshold=12):
     import numpy as np
     predicted_speed = 1.0
     pitch_reference = [(round(x[0], 2), x[1][0]) for x in pitch_reference]
@@ -28,33 +28,45 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
     # Fill the cost matrix
     for i in range(1, I+1):
         for j in range(1, J+1):
-            pitch_dist = abs(user_pitches[i-1] - ref_pitches[j-1])
-
-            D[i, j] = pitch_dist + min(
-                D[i-1, j],    # Deletion (user note skipped)
-                D[i, j-1],    # Insertion (reference note skipped)
-                D[i-1, j-1]   # Match or substitute
-            )
-
-    # Backtrack to find the alignment path
+            pitch_dist = abs(user_pitches[i-1] - ref_pitches[j-1]) 
+            if pitch_dist > pitch_threshold:
+                D[i, j] = D[i-1, j]
+            else:
+                D[i, j] = pitch_dist + min(
+                    D[i-1, j],    # Deletion (user note skipped)
+                    D[i, j-1],    # Insertion (reference note skipped)
+                    D[i-1, j-1]   # Match or substitute
+                )
+    print(D)
     alignment_path = []
-    i, j = I, np.argmin(D[I, :])  # End anywhere in the reference
+    i, j = I, np.argmin(D[I, len(D) - 2:]) + len(D) - 2  # End anywhere in the reference
     while i > 0 and j > 0:
-        alignment_path.append((i-1, j-1))
+        alignment_path.append((i - 1, int(j - 1)))
         pitch_dist = abs(user_pitches[i-1] - ref_pitches[j-1])
-
+        
         # Backtracking logic: match, deletion, or insertion
-        if D[i, j] == pitch_dist + D[i-1, j-1]:
-            i -= 1
-            j -= 1
-        elif D[i, j] == pitch_dist + D[i-1, j]:
-            i -= 1
+        if i != 1:
+            if D[i, j] == pitch_dist + D[i-1, j-1]:
+                i -= 1
+                j -= 1
+            elif D[i, j] == pitch_dist + D[i-1, j]:
+                i -= 1
+            else:
+                j -= 1
         else:
-            j -= 1
+            if D[i, j] == pitch_dist + D[i, j - 1]:
+                j -= 1
+            elif D[i, j] == pitch_dist + D[i-1, j - 1]:
+                i -= 1
+                j -= 1
+            else:
+                i -= 1
 
     alignment_path.reverse()  # Start-to-end order
-
     print(alignment_path)
+
+    model = train_linear_regression(alignment_path)
+    predicted_speed = predict_tempo_with_linear_regression(model, alignment_path, user_times, ref_times)
 
     # Get the reference time aligned to the last user note
     last_user_idx, last_ref_idx = alignment_path[-1]

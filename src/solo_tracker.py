@@ -8,12 +8,12 @@ import time
 class SoloTracker:
     def __init__(self):
         self.samplerate = 44100
-        self.hop_size = 512
+        self.hop_size = 256
         self.window_size = 1024  # Adjusted buffer size for better performance
         
         self.pitch_detector = aubio.pitch("yin", self.window_size, self.hop_size, self.samplerate)
         self.pitch_detector.set_unit("midi")
-        self.pitch_detector.set_tolerance(0.05)
+        self.pitch_detector.set_tolerance(0.2)
 
         self.running = False
         self.pitches = queue.Queue()
@@ -35,7 +35,7 @@ class SoloTracker:
             confidence = self.pitch_detector.get_confidence()
             energy = np.sqrt(np.mean(samples**2))
 
-            if pitch > 0 and energy > 0.03 and confidence > 0.8:
+            if pitch > 0 and energy > 0.015 and confidence > 0.8:
                 self.pitches.put(pitch)
                 confidence = self.pitch_detector.get_confidence()
                 self.confidences += [confidence]

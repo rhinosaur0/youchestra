@@ -11,16 +11,16 @@ def train_linear_regression(data):
     :return: trained linear regression model
     """
     # Extract features (X) and targets (y)
-    X = np.array([d[0] for d in data])  # Features: relative timing intervals
-    y = np.array([d[1] for d in data])  # Target speeds
+    X = np.array([0] + [d[0] for d in data]).reshape(-1, 1)  # Features: relative timing intervals
+    y = np.array([0] + [d[1] for d in data])  # Target speeds
 
     # Train the linear regression model
     model = LinearRegression()
     model.fit(X, y)
 
-    return model
+    return model.coef_[0]
 
-def predict_tempo_with_linear_regression(model, alignment_path, user_times, ref_times, num_recent=3):
+def predict_tempo_with_linear_regression(model, alignment_path, user_times, ref_times, num_recent=5):
     """
     Predict the tempo of the soloist using a trained linear regression model.
 
@@ -32,19 +32,29 @@ def predict_tempo_with_linear_regression(model, alignment_path, user_times, ref_
     :return: predicted_speed: the relative tempo of the soloist
     """
     # Extract the most recent notes from the alignment path
-    recent_path = alignment_path[-num_recent:] if len(alignment_path) >= num_recent else alignment_path
-
-    # Compute relative timing intervals for the recent notes
+    if len(alignment_path) < 2:
+        return 1.0
+    
     relative_intervals = []
-    for k in range(1, len(recent_path)):
-        i_prev, j_prev = recent_path[k-1]
-        i_curr, j_curr = recent_path[k]
 
-        user_interval = user_times[i_curr] - user_times[i_prev]
-        ref_interval = ref_times[j_curr] - ref_times[j_prev]
+    start_i, start_j = alignment_path[0]
 
-        if ref_interval > 0:
-            relative_intervals.append(user_interval / ref_interval)
+    for k in range(1, len(alignment_path)):
+        i_curr, j_curr = alignment_path[k]
+
+        # Only compute the ratio when both i and j change
+        if i_curr != start_i and j_curr != start_j:
+            # Compute time intervals
+            user_interval = user_times[i_curr] - user_times[start_i]
+            ref_interval = ref_times[j_curr] - ref_times[start_j]
+
+            # Avoid division by zero
+            if ref_interval > 0:
+                relative_intervals.append(user_interval / ref_interval)
+            
+            # Update starting point
+            start_i, start_j = i_curr, j_curr
+
 
     # Pad relative_intervals to ensure it matches num_recent-1 length
     while len(relative_intervals) < num_recent - 1:
@@ -52,7 +62,8 @@ def predict_tempo_with_linear_regression(model, alignment_path, user_times, ref_
 
     # Predict the tempo using the linear regression model
     features = np.array(relative_intervals).reshape(1, -1)  # Shape as a single sample
-    predicted_speed = model.predict(features)[0]
+    print(features)
+    predicted_speed = 1
 
     return predicted_speed
 

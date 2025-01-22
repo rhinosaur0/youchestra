@@ -36,26 +36,46 @@ class Conductor:
             # universal time of the piece progression
             accompanist_progression = self.accomp_player.retrieve_progression()
 
+            if not hasattr(self, 'cached_solo_pitch_start_time'):
+                self.cached_solo_pitch_start_time = None  # Initialize cache
+
+            # Update solo_pitch_history if conditions are met
             if not self.solo_pitch_history or abs(latest_pitch - self.solo_pitch_history[-1][1]) >= 1:
                 self.solo_pitch_history.append((round(time.time() - start_time, 2), latest_pitch))
-                self.solo_pitch_history = [item for item in self.solo_pitch_history if \
-                                          item[0] + default_sec_per_beat * 4 >= accompanist_progression]
+                self.solo_pitch_history = [
+                    item for item in self.solo_pitch_history
+                    if item[0] + default_sec_per_beat * 6 >= accompanist_progression
+                ]
             else:
+                # No update to pitch history; skip recalculation
                 continue
-            
+
             print(self.solo_pitch_history)
-            soloist_progression, predicted_speed = dtw_pitch_alignment_with_speed(self.solo_pitch_history, solo_pitch_reference, accompanist_progression)
-            print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}')
-            
-            new_window = []
-            i = soloist_first_event - 32
-            while i < 0 or self.solo_events[i][0] < accompanist_progression - 8 * default_sec_per_beat:
-                i += 1
-            while self.solo_events[i][0] < accompanist_progression + 8 * default_sec_per_beat and i - soloist_first_event < 32:
-                new_window.append(self.solo_events[i])
-                i += 1
-            soloist_first_event = i
-            solo_pitch_reference = new_window
+
+            # Check if the start of the solo pitch history has changed
+            if not self.cached_solo_pitch_start_time or self.cached_solo_pitch_start_time != self.solo_pitch_history[0][0]:
+                # Update the cached start time
+                self.cached_solo_pitch_start_time = self.solo_pitch_history[0][0]
+
+                # Recompute the reference pitches based on the new start time
+                new_window = []
+                i = soloist_first_event - 16
+                while i < 0 or self.solo_events[i][0] < accompanist_progression - 8 * default_sec_per_beat:
+                    i += 1
+                while self.solo_events[i][0] < accompanist_progression + 8 * default_sec_per_beat and i - soloist_first_event < 16:
+                    new_window.append(self.solo_events[i])
+                    i += 1
+                soloist_first_event = i
+                solo_pitch_reference = new_window
+
+            # Perform alignment only when necessary
+            soloist_progression, predicted_speed = dtw_pitch_alignment_with_speed(
+                self.solo_pitch_history, solo_pitch_reference, accompanist_progression
+            )
+            print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}\n')
+
+
+
             # if not solo_pitch_reference:
             #     print(solo_pitch_reference)
         
