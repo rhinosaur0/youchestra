@@ -20,6 +20,7 @@ class Conductor:
         time_ticker = 1
         solo_pitch_reference = [note for note in self.solo_events[:32] if note[0] < 8 * default_sec_per_beat]
         soloist_first_event = 0
+        soloist_progression = 0
         barrier.wait()
         while self.accomp_player.playing:
             # prevents excessive tracking
@@ -60,9 +61,9 @@ class Conductor:
                 # Recompute the reference pitches based on the new start time
                 new_window = []
                 i = soloist_first_event - 16
-                while i < 0 or self.solo_events[i][0] < accompanist_progression - 8 * default_sec_per_beat:
+                while i < 0 or self.solo_events[i][0] < soloist_progression - 8 * default_sec_per_beat:
                     i += 1
-                while self.solo_events[i][0] < accompanist_progression + 8 * default_sec_per_beat and i - soloist_first_event < 16:
+                while self.solo_events[i][0] < soloist_progression + 8 * default_sec_per_beat and i - soloist_first_event < 16:
                     new_window.append(self.solo_events[i])
                     i += 1
                 soloist_first_event = i

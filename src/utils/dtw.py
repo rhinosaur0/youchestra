@@ -1,6 +1,14 @@
 import numpy as np
 from utils.lin_reg import train_linear_regression, predict_tempo_with_linear_regression
 
+def pitch_distance(ref_pitch, perf_pitch):
+    semitone_diff = abs(ref_pitch - perf_pitch)
+    if semitone_diff == 0:
+        return 0  # Exact match
+    elif semitone_diff <= 2:
+        return 0.5  # Small penalty for nearby notes
+    else:
+        return 3.0  # Large penalty for outliers (hallucinations)
 
 def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment_progress, pitch_threshold=12):
     import numpy as np
@@ -28,7 +36,7 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
     # Fill the cost matrix
     for i in range(1, I+1):
         for j in range(1, J+1):
-            pitch_dist = abs(user_pitches[i-1] - ref_pitches[j-1]) 
+            pitch_dist = pitch_distance(user_pitches[i-1], ref_pitches[j-1]) 
             if pitch_dist > pitch_threshold:
                 D[i, j] = D[i-1, j]
             else:
@@ -39,10 +47,10 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
                 )
     print(D)
     alignment_path = []
-    i, j = I, np.argmin(D[I, len(D) - 2:]) + len(D) - 2  # End anywhere in the reference
+    i, j = I, np.argmin(D[I, :])   # End anywhere in the reference
     while i > 0 and j > 0:
         alignment_path.append((i - 1, int(j - 1)))
-        pitch_dist = abs(user_pitches[i-1] - ref_pitches[j-1])
+        pitch_dist = pitch_distance(user_pitches[i-1], ref_pitches[j-1]) 
         
         # Backtracking logic: match, deletion, or insertion
         if i != 1:
