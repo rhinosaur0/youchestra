@@ -15,7 +15,7 @@ class Conductor:
         Continuously compares the soloist's performance to the reference track
         and adjusts the accompaniment tempo dynamically.
         """
-        subdivision = 8
+        subdivision = 4
         start_time = time.time()
         time_ticker = 1
         solo_pitch_reference = [note for note in self.solo_events[:32] if note[0] < 8 * default_sec_per_beat]
@@ -52,6 +52,7 @@ class Conductor:
                 continue
 
             print(self.solo_pitch_history)
+            print(solo_pitch_reference)
 
             # Check if the start of the solo pitch history has changed
             if not self.cached_solo_pitch_start_time or self.cached_solo_pitch_start_time != self.solo_pitch_history[0][0]:
@@ -61,9 +62,9 @@ class Conductor:
                 # Recompute the reference pitches based on the new start time
                 new_window = []
                 i = soloist_first_event - 16
-                while i < 0 or self.solo_events[i][0] < soloist_progression - 8 * default_sec_per_beat:
+                while i < 0 or self.solo_events[i][0] < soloist_progression - 12 * default_sec_per_beat:
                     i += 1
-                while self.solo_events[i][0] < soloist_progression + 8 * default_sec_per_beat and i - soloist_first_event < 16:
+                while self.solo_events[i][0] < soloist_progression + 12 * default_sec_per_beat and i - soloist_first_event < 16:
                     new_window.append(self.solo_events[i])
                     i += 1
                 soloist_first_event = i

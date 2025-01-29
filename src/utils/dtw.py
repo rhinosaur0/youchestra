@@ -45,11 +45,14 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
                     D[i, j-1],    # Insertion (reference note skipped)
                     D[i-1, j-1]   # Match or substitute
                 )
-    print(D)
+
     alignment_path = []
+    alignment_path_pitches = []
     i, j = I, np.argmin(D[I, :])   # End anywhere in the reference
+    
     while i > 0 and j > 0:
         alignment_path.append((i - 1, int(j - 1)))
+        alignment_path_pitches.append((user_pitches[i-1], ref_pitches[j-1]))
         pitch_dist = pitch_distance(user_pitches[i-1], ref_pitches[j-1]) 
         
         # Backtracking logic: match, deletion, or insertion
@@ -71,7 +74,8 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
                 i -= 1
 
     alignment_path.reverse()  # Start-to-end order
-    print(alignment_path)
+    alignment_path_pitches.reverse()
+    print(alignment_path_pitches)
 
     model = train_linear_regression(alignment_path)
     predicted_speed = predict_tempo_with_linear_regression(model, alignment_path, user_times, ref_times)

@@ -49,7 +49,6 @@ class SoloTracker:
     # external
     def get_latest_pitch(self):
         temp = []
-    
         while not self.pitches.empty():
             raw_note = self.pitches.get_nowait()
             temp.append(round(raw_note))
