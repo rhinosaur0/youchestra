@@ -1,31 +1,34 @@
-import rtmidi
-from rtmidi.midiconstants import NOTE_ON, NOTE_OFF
 import time
+import mido
+import os
+from threading import Thread
+from utils.midi_utils import Note
 
 class AccompanimentPlayer:
     def __init__(self):
-        self.midi_out = rtmidi.MidiOut()
-        available_ports = self.midi_out.get_ports()
-        if available_ports:
-            for i, port in enumerate(available_ports):
-                if "IAC Driver" in port:
-                    print(f"Using MIDI Port: {port}")
-                    self.midi_out.open_port(i)
-                    break
-            else:
-                raise RuntimeError("IAC Driver not found in available MIDI ports.")
-        else:
-            raise RuntimeError("No MIDI output ports available.")
-
-        self.events = []
+        self.midi_out = mido.open_output()
+        self.mid = None
         self.tempo_factor = 1.0
         self.playing = False
+        self.partition = None
+        self.notes = []
 
-    def load_events(self, events):
-        self.events = events
+    def load_events(self, midifile):
+
+        for n in range(0, 88):
+            self.notes.append(Note(n))
+
+        try:
+            mid = mido.MidiFile(midifile)
+            filename, _ = os.path.splitext(os.path.split(midifile)[1])
+            name = filename if mid.tracks[0].name == "" else mid.tracks[0].name
+        except (OSError, EOFError) as e:
+            pass
+        partition, length = get_partition(mid)
+        
+        self.partition = partition
 
     def start_playback(self, barrier):
-        
         self.playing = True
         barrier.wait()
         self._play_thread()
@@ -34,29 +37,49 @@ class AccompanimentPlayer:
         self.playing = False
 
     def _play_thread(self):
-        start_time = time.time()
-        for start_sec, pitch, dur_sec in self.events:
-            self.current_progression = start_sec
-            if not self.playing:
-                break
-            adj_start = start_sec / self.tempo_factor
-            adj_dur = dur_sec / self.tempo_factor
-
-            while time.time() - start_time < adj_start:
-                if not self.playing:
-                    return
-                time.sleep(0.001)
-            
-            for i in range(0, len(pitch)):
-                self.midi_out.send_message([NOTE_ON, pitch[i], 100])
-            
-            time.sleep(adj_dur)
-            for i in range(0, len(pitch)):
-                self.midi_out.send_message([NOTE_OFF, pitch[i], 0])
-            
+        i = 0
+        modif = 0
+        tstart = time.time()
+        paused = False
+        while self.partition[i]:
+            tnow = time.time()
+            if tnow + modif > self.partition[i]["time"] + tstart:
+                if self.partition[i]["msg"].type == "note_on" and not self.partition[i]["note_off"]:
+                    self.notes[self.partition[i]["msg"].note - 21].playuntil = (
+                        tnow + self.partition[i]["new_velocity"] / 10
+                    )
+                    self.notes[self.partition[i]["msg"].note - 21].velocity = self.partition[i]["new_velocity"]
+                    self.notes[self.partition[i]["msg"].note - 21].channel = self.partition[i]["msg"].channel
+                
+                self.midi_out.send(self.partition[i]["msg"])
+                i += 1
+                continue
+            wait_time = self.partition[i]["time"] + tstart - (tnow + modif)
+            if wait_time > 0.01:
+                time.sleep(0.01)
+            if paused:
+                modif -= time.time() - tnow
 
     def adjust_tempo(self, factor):
         self.tempo_factor = max(0.8, min(2.0, factor))  # Limit tempo to 0.5x - 2.0x
 
     def retrieve_progression(self):
         return self.current_progression
+    
+
+def get_partition(mid):
+    _time = 1
+    partition = []
+    for msg in mid:
+        _time += msg.time
+        if isinstance(msg, mido.MetaMessage):
+            continue
+        partition.append(
+            {"time": _time, "msg": msg, "new_velocity": 0, "note_off": False}
+        )
+    partition.append(None)
+    length = partition[-2]["time"]
+ # print all channel from 0
+    return partition, length
+
+

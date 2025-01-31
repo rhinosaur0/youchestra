@@ -10,16 +10,17 @@ def main():
 
     solo_midi_path = "assets/solo.mid"
     accomp_midi_path = "assets/accompaniment.mid"
+    default_sec_per_beat = 0.3
     
 
     # Parse the MIDI files
     solo_events, _ = parse_midi(solo_midi_path)
-    accomp_events, default_sec_per_beat = parse_midi(accomp_midi_path)
+
 
     barrier = threading.Barrier(2)
 
     accomp_player = AccompanimentPlayer()
-    accomp_player.load_events(accomp_events)
+    accomp_player.load_events(accomp_midi_path)
 
     # Initialize solo tracker (mic input)
     solo_tracker = SoloTracker()

@@ -59,3 +59,19 @@ def parse_midi(midi_path):
         combined_events.append((current_time, active_pitches, last_duration))
 
     return combined_events, default_sec_per_beat
+
+import time
+from threading import Thread
+
+class Note:
+    def __init__(self, id):
+        self.id = id
+        self.playuntil = 0
+        self.channel = 0
+        self.velocity = 0
+        self.particles = None
+        self.is_on = False
+
+
+
+
