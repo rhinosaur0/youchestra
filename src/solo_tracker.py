@@ -21,13 +21,14 @@ class SoloTracker:
         self.onset = False
         self.confidences = []
 
-    def start_listening(self):
+    def start_listening(self, barrier):
         self.running = True
         p = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paFloat32,
                 channels=1, rate=44100, input=True,
                 input_device_index=0, frames_per_buffer=self.hop_size)
 
+        barrier.wait()
         while True:
             data = stream.read(self.hop_size, exception_on_overflow=False)
             samples = np.fromstring(data,dtype=aubio.float_type)        
@@ -39,6 +40,7 @@ class SoloTracker:
                 self.pitches.put(pitch)
                 confidence = self.pitch_detector.get_confidence()
                 self.confidences += [confidence]
+            time.sleep(0.04)
 
     def stop_listening(self):
         self.running = False

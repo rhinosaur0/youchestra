@@ -35,7 +35,7 @@ class Conductor:
                 continue
             
             # universal time of the piece progression
-            accompanist_progression = self.accomp_player.retrieve_progression()
+            accompanist_progression = 0 #self.accomp_player.retrieve_progression()
 
             if not hasattr(self, 'cached_solo_pitch_start_time'):
                 self.cached_solo_pitch_start_time = None  # Initialize cache
@@ -74,7 +74,7 @@ class Conductor:
             soloist_progression, predicted_speed = dtw_pitch_alignment_with_speed(
                 self.solo_pitch_history, solo_pitch_reference, accompanist_progression
             )
-            print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}\n')
+            # print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}\n')
 
 
 

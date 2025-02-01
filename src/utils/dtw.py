@@ -75,7 +75,6 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
 
     alignment_path.reverse()  # Start-to-end order
     alignment_path_pitches.reverse()
-    print(alignment_path_pitches)
 
     model = train_linear_regression(alignment_path)
     predicted_speed = predict_tempo_with_linear_regression(model, alignment_path, user_times, ref_times)

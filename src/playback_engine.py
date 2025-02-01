@@ -1,7 +1,7 @@
 import time
 import mido
 import os
-from threading import Thread
+from threading import Thread, Barrier
 from utils.midi_utils import Note
 
 class AccompanimentPlayer:
@@ -12,6 +12,7 @@ class AccompanimentPlayer:
         self.playing = False
         self.partition = None
         self.notes = []
+        self.current_progression = 0
 
     def load_events(self, midifile):
 
@@ -50,7 +51,6 @@ class AccompanimentPlayer:
                     )
                     self.notes[self.partition[i]["msg"].note - 21].velocity = self.partition[i]["new_velocity"]
                     self.notes[self.partition[i]["msg"].note - 21].channel = self.partition[i]["msg"].channel
-                
                 self.midi_out.send(self.partition[i]["msg"])
                 i += 1
                 continue
@@ -64,7 +64,7 @@ class AccompanimentPlayer:
         self.tempo_factor = max(0.8, min(2.0, factor))  # Limit tempo to 0.5x - 2.0x
 
     def retrieve_progression(self):
-        return self.current_progression
+        return 0
     
 
 def get_partition(mid):
@@ -81,5 +81,17 @@ def get_partition(mid):
     length = partition[-2]["time"]
  # print all channel from 0
     return partition, length
+
+if __name__ == "__main__":
+    player = AccompanimentPlayer()
+    barrier = Barrier(1)
+    player.load_events("assets/accompaniment.mid")
+
+
+    playback_thread = Thread(target=player.start_playback, args=(barrier,))
+
+    playback_thread.start()
+    player.stop_playback()
+    print("Playback stopped")
 
 

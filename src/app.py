@@ -17,7 +17,7 @@ def main():
     solo_events, _ = parse_midi(solo_midi_path)
 
 
-    barrier = threading.Barrier(2)
+    barrier = threading.Barrier(3)
 
     accomp_player = AccompanimentPlayer()
     accomp_player.load_events(accomp_midi_path)
@@ -26,7 +26,7 @@ def main():
     solo_tracker = SoloTracker()
     
     # Start listening to the soloist
-    solo_tracker_thread = threading.Thread(target=solo_tracker.start_listening, daemon=True)
+    solo_tracker_thread = threading.Thread(target=solo_tracker.start_listening, args = (barrier,),daemon=True)
     solo_tracker_thread.start()
     
     # Initialize conductor to synchronize soloist and accompanist
@@ -57,3 +57,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

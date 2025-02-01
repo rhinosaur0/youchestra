@@ -62,7 +62,6 @@ def predict_tempo_with_linear_regression(model, alignment_path, user_times, ref_
 
     # Predict the tempo using the linear regression model
     features = np.array(relative_intervals).reshape(1, -1)  # Shape as a single sample
-    print(features)
     predicted_speed = 1
 
     return predicted_speed
