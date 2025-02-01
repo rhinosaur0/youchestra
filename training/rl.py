@@ -1,5 +1,6 @@
 import gym
 from gym import spaces
+from gym.utils import seeding
 import numpy as np
 
 # Define the custom environment.
@@ -28,6 +29,10 @@ class AccompanistTimingEnv(gym.Env):
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float32)
         
         self.reset()
+    
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
 
     def reset(self):
         # Reset note index and generate a new episode.
@@ -126,4 +131,4 @@ while not done:
     print(f"Note {info['note_index']}:")
     print(f"  Action (speed factor): {action[0]:.3f}")
     print(f"  Expected time: {info['expected_time']:.3f} | Actual time: {info['actual_time']:.3f}")
-    print(f"  Error: {info['error']:.3f} | Reward: {reward:.3f}\n")
+    print(f"  Error: {info['error']:.3f} | Reward: {reward:.3f}\n") 
