@@ -1,5 +1,5 @@
 import numpy as np
-from utils.lin_reg import train_linear_regression, predict_tempo_with_linear_regression
+# from utils.lin_reg import train_linear_regression, predict_tempo_with_linear_regression
 
 def pitch_distance(ref_pitch, perf_pitch):
     semitone_diff = abs(ref_pitch - perf_pitch)
@@ -85,4 +85,75 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
 
     return current_ref_time, predicted_speed
 
+import numpy as np
+
+def pack_alignment_features(pitch_history, pitch_reference, alignment_path):
+    """
+    Create a sequence of feature vectors from pitch_history and pitch_reference
+    using the provided alignment_path.
+    
+    Each feature vector will contain:
+      [user_time, user_pitch, ref_time, ref_pitch, time_diff, time_ratio, pitch_diff]
+    
+    Args:
+      pitch_history: list of (time, pitch) tuples for the performance.
+      pitch_reference: list of (time, pitch) tuples for the reference.
+      alignment_path: list of tuples (user_index, ref_index) indicating the alignment.
+      
+    Returns:
+      features: A numpy array of shape (sequence_length, feature_dim).
+    """
+    # Helper: ensure that pitch is a scalar (if it's a sequence, take its first element)
+    def flatten_pitch(p):
+        if isinstance(p, (list, tuple, np.ndarray)):
+            return p[0]
+        return p
+
+    # Extract times and pitches from the histories.
+    user_times = np.array([t for (t, p) in pitch_history], dtype=float)
+    user_pitches = np.array([flatten_pitch(p) for (t, p) in pitch_history], dtype=float)
+    ref_times = np.array([t for (t, p) in pitch_reference], dtype=float)
+    ref_pitches = np.array([flatten_pitch(p) for (t, p) in pitch_reference], dtype=float)
+    
+    features = []
+    for (u_idx, r_idx) in alignment_path:
+        ut = float(user_times[u_idx])
+        up = float(user_pitches[u_idx])
+        rt = float(ref_times[r_idx])
+        rp = float(ref_pitches[r_idx])
+        # Compute additional features:
+        time_ratio = ut / rt if rt != 0 else 0.0
+        pitch_diff = abs(up - rp)
+        # Feature vector for this aligned note pair.
+        feat_vec = [ut, up, rt, rp, time_ratio, pitch_diff]
+        features.append(feat_vec)
+    features = np.array(features, dtype=float)
+    return features
+
+# --- Example usage ---
+if __name__ == "__main__":
+    # Dummy data for illustration:
+    np.set_printoptions(precision=2, suppress=True, linewidth=100)
+
+    pitch_history = [
+        (0.5, 60),
+        (1.0, 62),
+        (1.5, 64),
+        (2.0, 65),
+        (2.5, 67)
+    ]
+    # For the reference, suppose each pitch is stored as a tuple (time, (pitch,))
+    pitch_reference = [
+        (0.6, (60,)),
+        (1.2, (62,)),
+        (1.8, (64,)),
+        (2.4, (65,)),
+        (3.0, (68,))
+    ]
+    alignment_path = [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)]
+    
+    features = pack_alignment_features(pitch_history, pitch_reference, alignment_path)
+    print("Packed feature sequence:")
+    print(features)
+    print(features.shape)
 
