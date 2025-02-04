@@ -3,6 +3,7 @@ from aubio import pitch
 import queue
 import music21
 import pyaudio
+import time
 import numpy as np
 # Open stream.
 # PyAudio object.
@@ -12,7 +13,7 @@ current_pitch = music21.pitch.Pitch()
 
 samplerate = 44100
 win_s = 1024
-hop_s = 256
+hop_s = 128
 tolerance = 0.2
 
 stream = p.open(format=pyaudio.paFloat32,
@@ -51,6 +52,7 @@ def get_current_note():
             print(pitch,'----',current,'----',current_pitch.microtone.cents, '----',midi_number, '----', confidence)
         q.put({'Note': current, 'Cents': current_pitch.microtone.cents,'hz':pitch})
         previous_energy = energy
+        time.sleep(0.001)
         
 
 if __name__ == '__main__':

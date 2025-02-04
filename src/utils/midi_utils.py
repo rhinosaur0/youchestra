@@ -13,7 +13,7 @@ def parse_midi(midi_path):
     list_parts = [part.flat.notesAndRests for part in score.parts]
     
     events = []  # To hold all events from all tracks
-    default_sec_per_beat = 0.3  # Example tempo: 120 BPM
+    default_sec_per_beat = 0.3  # Example tempo: 200 BPM
 
     for part in list_parts:
         current_time = 0.0

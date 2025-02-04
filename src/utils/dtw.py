@@ -1,5 +1,5 @@
 import numpy as np
-# from utils.lin_reg import train_linear_regression, predict_tempo_with_linear_regression
+from utils.lin_reg import train_linear_regression, predict_tempo_with_linear_regression
 
 def pitch_distance(ref_pitch, perf_pitch):
     semitone_diff = abs(ref_pitch - perf_pitch)
@@ -37,6 +37,8 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
     for i in range(1, I+1):
         for j in range(1, J+1):
             pitch_dist = pitch_distance(user_pitches[i-1], ref_pitches[j-1]) 
+            # pitch_dist = abs(user_pitches[i-1] - ref_pitches[j-1])
+
             if pitch_dist > pitch_threshold:
                 D[i, j] = D[i-1, j]
             else:
@@ -49,11 +51,12 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
     alignment_path = []
     alignment_path_pitches = []
     i, j = I, np.argmin(D[I, :])   # End anywhere in the reference
-    
+    # print(D)
     while i > 0 and j > 0:
         alignment_path.append((i - 1, int(j - 1)))
         alignment_path_pitches.append((user_pitches[i-1], ref_pitches[j-1]))
         pitch_dist = pitch_distance(user_pitches[i-1], ref_pitches[j-1]) 
+        # pitch_dist = abs(user_pitches[i-1] - ref_pitches[j-1])
         
         # Backtracking logic: match, deletion, or insertion
         if i != 1:
@@ -76,6 +79,9 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
     alignment_path.reverse()  # Start-to-end order
     alignment_path_pitches.reverse()
 
+    # print(alignment_path_pitches)
+    solo_input = np.array([[user_pitches[i], user_times[i], ref_pitches[j], ref_times[j]] for i, j in alignment_path])
+    print(solo_input)
     model = train_linear_regression(alignment_path)
     predicted_speed = predict_tempo_with_linear_regression(model, alignment_path, user_times, ref_times)
 
@@ -85,7 +91,6 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
 
     return current_ref_time, predicted_speed
 
-import numpy as np
 
 def pack_alignment_features(pitch_history, pitch_reference, alignment_path):
     """

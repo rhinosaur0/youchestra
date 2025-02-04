@@ -14,6 +14,9 @@ class AccompanimentPlayer:
         self.notes = []
         self.current_progression = 0
 
+        self.tnow = 0
+        self.tstart = 0
+
     def load_events(self, midifile):
 
         for n in range(0, 88):
@@ -24,6 +27,7 @@ class AccompanimentPlayer:
             filename, _ = os.path.splitext(os.path.split(midifile)[1])
             name = filename if mid.tracks[0].name == "" else mid.tracks[0].name
         except (OSError, EOFError) as e:
+            print(f"Error: {e}")
             pass
         partition, length = get_partition(mid)
         
@@ -40,35 +44,42 @@ class AccompanimentPlayer:
     def _play_thread(self):
         i = 0
         modif = 0
-        tstart = time.time()
+        # Instead of setting tstart here, we’ll set it on the first event.
+        first_event_sent = False
         paused = False
         while self.partition[i]:
-            tnow = time.time()
-            if tnow + modif > self.partition[i]["time"] + tstart:
+            self.tnow = time.time()
+            # Check if it’s time to send the next event.
+            if self.tnow + modif > self.partition[i]["time"] + self.tstart:
+                # If this is the first MIDI event, record the start time.
                 if self.partition[i]["msg"].type == "note_on" and not self.partition[i]["note_off"]:
+                    if not first_event_sent:
+                        self.tstart = self.tnow
+                        first_event_sent = True
                     self.notes[self.partition[i]["msg"].note - 21].playuntil = (
-                        tnow + self.partition[i]["new_velocity"] / 10
+                        self.tnow + self.partition[i]["new_velocity"] / 10
                     )
                     self.notes[self.partition[i]["msg"].note - 21].velocity = self.partition[i]["new_velocity"]
                     self.notes[self.partition[i]["msg"].note - 21].channel = self.partition[i]["msg"].channel
                 self.midi_out.send(self.partition[i]["msg"])
                 i += 1
                 continue
-            wait_time = self.partition[i]["time"] + tstart - (tnow + modif)
+            wait_time = self.partition[i]["time"] + self.tstart - (self.tnow + modif)
             if wait_time > 0.01:
                 time.sleep(0.01)
             if paused:
-                modif -= time.time() - tnow
+                modif -= time.time() - self.tnow
+
 
     def adjust_tempo(self, factor):
         self.tempo_factor = max(0.8, min(2.0, factor))  # Limit tempo to 0.5x - 2.0x
 
     def retrieve_progression(self):
-        return 0
+        return round(self.tnow - self.tstart, 3)
     
 
 def get_partition(mid):
-    _time = 1
+    _time = 0
     partition = []
     for msg in mid:
         _time += msg.time

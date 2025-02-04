@@ -174,5 +174,5 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-
+training_data/
 *.zip
