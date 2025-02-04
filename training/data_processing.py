@@ -26,8 +26,8 @@ def extract_notes_from_midi(file_path):
                 current_time += msg.time / 480  # Update timing (delta time format)
                 
                 if msg.type == "note_on" and msg.velocity > 0 and current_time - old_time > 0.1:  # Ignore note-off and zero-velocity note-ons
-                    notes.append((msg.note, current_time))  # Store note and its onset time
-                old_time = current_time
+                    notes.append((midi_to_note(int(msg.note)), current_time))  # Store note and its onset time
+                    old_time = current_time
                 
 
     return np.array(notes)  # Convert to numpy array

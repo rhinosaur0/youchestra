@@ -1,5 +1,6 @@
 import numpy as np
 from utils.lin_reg import train_linear_regression, predict_tempo_with_linear_regression
+import librosa
 
 def pitch_distance(ref_pitch, perf_pitch):
     semitone_diff = abs(ref_pitch - perf_pitch)
@@ -11,7 +12,7 @@ def pitch_distance(ref_pitch, perf_pitch):
         return 3.0  # Large penalty for outliers (hallucinations)
 
 def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment_progress, pitch_threshold=12):
-    import numpy as np
+
     predicted_speed = 1.0
     pitch_reference = [(round(x[0], 2), x[1][0]) for x in pitch_reference]
     pitch_history = [(round(x[0], 2), x[1] + 12) for x in pitch_history]
@@ -21,6 +22,11 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
     user_pitches = np.array([p for (t, p) in pitch_history])
     ref_times = np.array([t for (t, p) in pitch_reference])
     ref_pitches = np.array([p for (t, p) in pitch_reference])
+
+    # speed_factor, wp, matrix = compute_speed_factor(np.stack([user_times, user_pitches]), np.stack([ref_times, ref_pitches]))
+    # print(f'Speed factor: {speed_factor}')
+    # print(f'Warping path: {wp}')
+    # print(f'DTW matrix: {matrix}')
 
     I = len(user_pitches)
     J = len(ref_pitches)
@@ -81,9 +87,12 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
 
     # print(alignment_path_pitches)
     solo_input = np.array([[user_pitches[i], user_times[i], ref_pitches[j], ref_times[j]] for i, j in alignment_path])
+    user_attributes = np.stack(([user_times[i] for i, j in alignment_path], [user_pitches[i] for i, j in alignment_path]), axis=1).T
+    ref_attributes = np.stack(([ref_times[j] for i, j in alignment_path], [ref_pitches[j] for i, j in alignment_path]), axis=1).T
     print(solo_input)
-    model = train_linear_regression(alignment_path)
-    predicted_speed = predict_tempo_with_linear_regression(model, alignment_path, user_times, ref_times)
+    predicted_speed, wp, matrix = compute_speed_factor(user_attributes, ref_attributes)
+    print(f'Speed factor: {predicted_speed}')
+
 
     # Get the reference time aligned to the last user note
     last_user_idx, last_ref_idx = alignment_path[-1]
@@ -92,73 +101,53 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
     return current_ref_time, predicted_speed
 
 
-def pack_alignment_features(pitch_history, pitch_reference, alignment_path):
+def combined_distance(x, y, time_weight=1.0, pitch_weight=0.0):
     """
-    Create a sequence of feature vectors from pitch_history and pitch_reference
-    using the provided alignment_path.
+    Compute a weighted distance between two feature vectors x and y.
     
-    Each feature vector will contain:
-      [user_time, user_pitch, ref_time, ref_pitch, time_diff, time_ratio, pitch_diff]
+    Each feature vector is of the form:
+        [time, pitch]
+    The distance is defined as:
+        distance = time_weight * |x_time - y_time| + pitch_weight * |x_pitch - y_pitch|
+    """
+    time_diff = np.abs(x[0] - y[0])
+    pitch_diff = pitch_distance(x[1], y[1])
+    return time_weight * time_diff + pitch_weight * pitch_diff
+
+def compute_speed_factor(soloist_features, ref_features, time_weight=1.0, pitch_weight=0.5):
+    """
+    Compute a speed factor by aligning the soloist and reference sequences (each as [time, pitch])
+    using DTW. The speed factor is estimated as the median ratio between consecutive intervals
+    in the soloist performance and the reference.
     
     Args:
-      pitch_history: list of (time, pitch) tuples for the performance.
-      pitch_reference: list of (time, pitch) tuples for the reference.
-      alignment_path: list of tuples (user_index, ref_index) indicating the alignment.
-      
+      soloist_features (np.array): A 2 x N array where the first row is onset times and
+                                   the second row is pitches.
+      ref_features (np.array): A 2 x M array with the reference onset times and pitches.
+      time_weight (float): Weight for time differences.
+      pitch_weight (float): Weight for pitch differences.
+    
     Returns:
-      features: A numpy array of shape (sequence_length, feature_dim).
+      speed_factor (float): The median ratio of soloist interval to reference interval.
+      wp (np.array): The DTW warping path (an array of index pairs).
     """
-    # Helper: ensure that pitch is a scalar (if it's a sequence, take its first element)
-    def flatten_pitch(p):
-        if isinstance(p, (list, tuple, np.ndarray)):
-            return p[0]
-        return p
-
-    # Extract times and pitches from the histories.
-    user_times = np.array([t for (t, p) in pitch_history], dtype=float)
-    user_pitches = np.array([flatten_pitch(p) for (t, p) in pitch_history], dtype=float)
-    ref_times = np.array([t for (t, p) in pitch_reference], dtype=float)
-    ref_pitches = np.array([flatten_pitch(p) for (t, p) in pitch_reference], dtype=float)
+    # Run DTW using our custom metric.
+    matrix, wp = librosa.sequence.dtw(X=soloist_features, Y=ref_features,
+                                  metric=lambda x, y: combined_distance(x, y, time_weight, pitch_weight))
+    # The warping path is returned in reverse order; reverse it to be chronological.
+    wp = np.array(wp)[::-1]
     
-    features = []
-    for (u_idx, r_idx) in alignment_path:
-        ut = float(user_times[u_idx])
-        up = float(user_pitches[u_idx])
-        rt = float(ref_times[r_idx])
-        rp = float(ref_pitches[r_idx])
-        # Compute additional features:
-        time_ratio = ut / rt if rt != 0 else 0.0
-        pitch_diff = abs(up - rp)
-        # Feature vector for this aligned note pair.
-        feat_vec = [ut, up, rt, rp, time_ratio, pitch_diff]
-        features.append(feat_vec)
-    features = np.array(features, dtype=float)
-    return features
-
-# --- Example usage ---
-if __name__ == "__main__":
-    # Dummy data for illustration:
-    np.set_printoptions(precision=2, suppress=True, linewidth=100)
-
-    pitch_history = [
-        (0.5, 60),
-        (1.0, 62),
-        (1.5, 64),
-        (2.0, 65),
-        (2.5, 67)
-    ]
-    # For the reference, suppose each pitch is stored as a tuple (time, (pitch,))
-    pitch_reference = [
-        (0.6, (60,)),
-        (1.2, (62,)),
-        (1.8, (64,)),
-        (2.4, (65,)),
-        (3.0, (68,))
-    ]
-    alignment_path = [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)]
-    
-    features = pack_alignment_features(pitch_history, pitch_reference, alignment_path)
-    print("Packed feature sequence:")
-    print(features)
-    print(features.shape)
+    # Compute local interval ratios along the warping path.
+    ratios = []
+    soloist_times = soloist_features[0]
+    ref_times = ref_features[0]
+    for i in range(1, len(wp)):
+        idx_solo_prev, idx_ref_prev = wp[i-1]
+        idx_solo, idx_ref = wp[i]
+        delta_solo = soloist_times[idx_solo] - soloist_times[idx_solo_prev]
+        delta_ref = ref_times[idx_ref] - ref_times[idx_ref_prev]
+        if delta_ref > 0:
+            ratios.append(delta_solo / delta_ref)
+    speed_factor = np.median(ratios) if ratios else 1.0
+    return speed_factor, wp, matrix
 

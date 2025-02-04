@@ -60,6 +60,29 @@ def parse_midi(midi_path):
 
     return combined_events, default_sec_per_beat
 
+def extract_midi_onsets_and_pitches(midi_file, instrument_index=0):
+    """
+    Extract note onset times and pitches from a MIDI file.
+    
+    Args:
+      midi_file (str): Path to the MIDI file.
+      instrument_index (int): Which instrument track to use (default is 0).
+    
+    Returns:
+      onset_times (np.array): Array of note onset times (in seconds).
+      pitches (np.array): Array of corresponding MIDI pitch numbers.
+    """
+    import pretty_midi
+    import numpy as np
+    pm = pretty_midi.PrettyMIDI(midi_file)
+    # Select an instrument (assumes that the desired soloist is in one track)
+    instrument = pm.instruments[instrument_index]
+    # Sort the notes by their start time
+    notes = sorted(instrument.notes, key=lambda note: note.start)
+    onset_times = np.array([note.start for note in notes])
+    pitches = np.array([note.pitch for note in notes])
+    return np.stack((onset_times, pitches))
+
 import time
 from threading import Thread
 
@@ -73,5 +96,8 @@ class Note:
         self.is_on = False
 
 
+if __name__ == "__main__":
+    print(parse_midi("assets/solo.mid")[0][:10])
+    print(extract_midi_onsets_and_pitches("assets/solo.mid")[:, :10])
 
 

@@ -9,7 +9,7 @@ def main():
     # Load MIDI files
 
     solo_midi_path = "assets/solo.mid"
-    accomp_midi_path = "training_data/maestro-v3.0.0/2017/MIDI-Unprocessed_046_PIANO046_MID--AUDIO-split_07-06-17_Piano-e_2-02_wav--4.midi"
+    accomp_midi_path = "assets/accompaniment.mid"
     default_sec_per_beat = 0.3
     
 
