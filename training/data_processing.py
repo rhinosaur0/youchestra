@@ -42,8 +42,9 @@ def pick_pieces(pieces = ["Ballade No. 1 in G Minor, Op. 23"]):
     filtered_data = df[df["canonical_title"].isin(pieces)]
 
     filtered_data = filtered_data["midi_filename"].tolist()
+    print(filtered_data[0])
     first_tensor = extract_notes_from_midi(f"{base_path}{filtered_data[0]}")
-    print(first_tensor[:100, :])
+    print(first_tensor[:10, :])
     
 
 
