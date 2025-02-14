@@ -2,6 +2,7 @@ import gym
 from gym import spaces
 import numpy as np
 from typing import Optional
+from data_processing import prepare_tensor
 
 class MusicAccompanistEnv(gym.Env):
     """
@@ -27,7 +28,7 @@ class MusicAccompanistEnv(gym.Env):
 
         # Observation: a 4 x window_size tensor.
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(4, window_size), dtype=np.float32
+            low=-np.inf, high=np.inf, shape=(2, window_size), dtype=np.float32
         )
         # Action: A single continuous speed factor.
         self.action_space = spaces.Box(
@@ -47,7 +48,7 @@ class MusicAccompanistEnv(gym.Env):
         """
         # Extract the current reference and soloist timing
         ref_timing = self.data[1, self.current_index]
-        solo_timing = self.data[3, self.current_index]
+        solo_timing = self.data[0, self.current_index]
         speed_factor = action[0]
         predicted_timing = ref_timing * speed_factor
         
@@ -62,7 +63,7 @@ class MusicAccompanistEnv(gym.Env):
         if not done:
             obs = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
         else:
-            obs = np.zeros((4, self.window_size), dtype=np.float32)
+            obs = np.zeros((2, self.window_size), dtype=np.float32)
         info = {}
         return obs, reward, done, info
 
@@ -129,8 +130,7 @@ class RecurrentPPOAgent:
 # -----------------------------
 if __name__ == "__main__":
     # Generate dummy 4 x n_notes data for demonstration.
-    n_notes = 1000
-    data = np.random.rand(4, n_notes).astype(np.float32)
+    data = prepare_tensor("assets/real_chopin.mid", "assets/reference_chopin.mid").T
     
     # Wrap the custom environment in a DummyVecEnv (as required by Stable Baselines)
     env = DummyVecEnv([lambda: MusicAccompanistEnv(data, window_size=10)])
