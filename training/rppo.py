@@ -1,118 +1,145 @@
 import gym
 from gym import spaces
 import numpy as np
+from typing import Optional
 
-class AccompanistLSTMPredictionEnv(gym.Env):
+class MusicAccompanistEnv(gym.Env):
     """
-    The agent outputs a continuous speed factor (action), which is applied to the omitted
-    reference metronomic timings to predict the soloist timings via:
-        predicted_timing = reference_time / speed_factor
-
-    The reward is computed as the negative mean relative error between the predicted and actual
-    soloist timings from the omitted portion.
-    """
-    def __init__(self, episode_data, provided_length, speed_bounds=(0.7, 1.3)):
-        """
-        Parameters:
-        - episode_data: np.ndarray, shape (num_notes, 4) for one episode.
-        - provided_length: int, the number of rows (notes) provided to the agent.
-        - speed_bounds: tuple, the lower and upper bounds for the speed factor action.
-        """
-        super(AccompanistLSTMPredictionEnv, self).__init__()
-        
-        self.episode_data = episode_data  # shape: (num_notes, 4)
-        self.provided_length = provided_length
-        self.speed_bounds = speed_bounds
-        self.num_notes = self.episode_data.shape[0]
-        
-        if self.provided_length >= self.num_notes:
-            raise ValueError("provided_length must be less than the total number of notes in the episode.")
-        
-        self.omitted_length = self.num_notes - self.provided_length
-
-        # Action space: a single continuous value (the speed factor)
-        self.action_space = spaces.Box(low=np.array([speed_bounds[0]], dtype=np.float32),
-                                       high=np.array([speed_bounds[1]], dtype=np.float32),
-                                       dtype=np.float32)
-
-        # Observation space: the "given" portion of the data with shape (provided_length, 4)
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, 
-                                            shape=(self.provided_length, 4), 
-                                            dtype=np.float32)
+    A custom Gym environment for a music accompanist.
     
+    Observations: A sliding window (4 x window_size) from the input data.
+       - Row 0: Reference pitch
+       - Row 1: Reference pitch's metronomic timing
+       - Row 2: Soloist pitch
+       - Row 3: Soloist pitch timing
+    
+    Action: A continuous speed adjustment factor (e.g., between 0.5 and 1.5).
+    
+    Reward: Negative absolute difference of the ratio 
+            ( (reference timing * speed_factor) / soloist timing ) from 1.
+    """
+    def __init__(self, data, window_size=10):
+        super(MusicAccompanistEnv, self).__init__()
+        self.data = data 
+        self.n_notes = self.data.shape[1]
+        self.window_size = window_size
+        self.current_index = window_size  # start after the first window
+
+        # Observation: a 4 x window_size tensor.
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(4, window_size), dtype=np.float32
+        )
+        # Action: A single continuous speed factor.
+        self.action_space = spaces.Box(
+            low=0.5, high=1.5, shape=(1,), dtype=np.float32
+        )
+
     def reset(self):
-        """
-        Resets the environment for a new episode.
-        Returns:
-            The observation: the given portion of the episode data.
-        """
-        # Split the episode data into given and omitted parts.
-        self.given_data = self.episode_data[:self.provided_length]
-        self.omitted_data = self.episode_data[self.provided_length:]
-        return self.given_data.astype(np.float32)
-    
+        """Reset the environment to the beginning of an episode."""
+        self.current_index = self.window_size
+        return self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
+
     def step(self, action):
         """
-        Takes a step using the agent's action (speed factor) and computes the reward.
-        
-        Parameters:
-            action (array-like): A single-element array representing the speed factor.
-        
-        Returns:
-            observation (np.ndarray): (For a one-step episode, this remains the given data.)
-            reward (float): Negative mean relative error between predicted and actual timings.
-            done (bool): Whether the episode is finished (True after one step).
-            info (dict): Additional diagnostic information.
+        Apply the speed adjustment factor (action) to the reference timing,
+        then compute the reward based on how close the predicted timing (ref_timing * action)
+        is to the soloist's actual timing.
         """
-        # Ensure the action is within bounds.
-        speed_factor = float(np.clip(action[0], self.speed_bounds[0], self.speed_bounds[1]))
+        # Extract the current reference and soloist timing
+        ref_timing = self.data[1, self.current_index]
+        solo_timing = self.data[3, self.current_index]
+        speed_factor = action[0]
+        predicted_timing = ref_timing * speed_factor
         
-        # Extract the reference metronomic timings from the omitted portion.
-        reference_timings = self.omitted_data[:, 1]  # Column 1
+        # Reward: We want predicted_timing / solo_timing to be as close to 1 as possible.
+        ratio_diff = abs(predicted_timing / solo_timing - 1)
+        reward = -ratio_diff  # Smaller difference yields a higher reward
         
-        # Compute predicted soloist timings by applying the speed factor.
-        predicted_timings = reference_timings / speed_factor
+        # Move the window forward by one note
+        self.current_index += 1
+        done = (self.current_index >= self.n_notes)
         
-        # Actual soloist timings are in column 3.
-        actual_timings = self.omitted_data[:, 3]
-        
-        # Compute relative errors. (A small epsilon is added to avoid division by zero.)
-        eps = 1e-8
-        relative_errors = np.abs(predicted_timings - actual_timings) / (np.abs(actual_timings) + eps)
-        mean_relative_error = np.mean(relative_errors)
-        
-        # Reward is negative mean relative error (we want to minimize the error).
-        reward = -mean_relative_error
-        
-        # Since this environment is a one-decision episode, mark it as done.
-        done = True
-        
-        info = {
-            "speed_factor": speed_factor,
-            "predicted_timings": predicted_timings,
-            "actual_timings": actual_timings,
-            "mean_relative_error": mean_relative_error
-        }
-        
-        # In a one-step episode, you might return the same observation (or a dummy value).
-        observation = self.given_data.astype(np.float32)
-        
-        return observation, reward, done, info
+        if not done:
+            obs = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
+        else:
+            obs = np.zeros((4, self.window_size), dtype=np.float32)
+        info = {}
+        return obs, reward, done, info
 
-    def render(self, mode="human"):
-        # Optional: Implement visualization if needed.
+    def render(self, mode='human'):
         pass
 
-    def close(self):
-        pass
 
-episode_data = np.array([
-    # [reference_note, reference_timing, soloist_pitch, soloist_timing],
-    [60, 1.0, 62, 0.95],
-    [62, 2.0, 64, 1.90],
-    # ... more rows ...
-])
 
-provided_length = 35
-env = AccompanistLSTMPredictionEnv(episode_data, provided_length)
-obs = env.reset() 
+from sb3_contrib import RecurrentPPO
+from stable_baselines3.common.vec_env import DummyVecEnv
+
+class RecurrentPPOAgent:
+    def __init__(self, env, file_path: Optional[str] = None):
+        self.file_path = file_path
+        self.lstm_states = None
+        # episode_starts must be an array-like value; we use shape (1,) here.
+        self.episode_starts = np.ones((1,), dtype=bool)
+        self.env = env
+        self.model = None
+        self._initialize()
+        self.model.set_env(env)
+
+
+    def _initialize(self) -> None:
+        if self.file_path is None:
+            # Create the RecurrentPPO model using an LSTM policy.
+            # Note: the environment is set later in the learn() method.
+            self.model = RecurrentPPO("MlpLstmPolicy", self.env, verbose=0)
+        else:
+            self.model = RecurrentPPO.load(self.file_path)
+
+    def reset(self) -> None:
+        """Reset the agent's LSTM states and episode_start flag."""
+        self.episode_starts = np.ones((1,), dtype=bool)
+        self.lstm_states = None
+
+    def predict(self, obs):
+        """
+        Predict an action given an observation, while maintaining LSTM states.
+        The `episode_start` flag ensures that the recurrent network resets at the start of an episode.
+        """
+        action, self.lstm_states = self.model.predict(
+            obs,
+            state=self.lstm_states,
+            episode_start=self.episode_starts,
+            deterministic=True
+        )
+        # After the first call in an episode, set episode_starts to False.
+        self.episode_starts = np.zeros((1,), dtype=bool)
+        return action
+
+    def save(self, file_path: str) -> None:
+        self.model.save(file_path)
+
+    def learn(self, total_timesteps, log_interval: int = 1, verbose=0):
+        """
+        Set the environment, adjust verbosity, and begin training.
+        """
+        self.model.verbose = verbose
+        self.model.learn(total_timesteps=total_timesteps, log_interval=log_interval)
+
+# -----------------------------
+# Training Example
+# -----------------------------
+if __name__ == "__main__":
+    # Generate dummy 4 x n_notes data for demonstration.
+    n_notes = 1000
+    data = np.random.rand(4, n_notes).astype(np.float32)
+    
+    # Wrap the custom environment in a DummyVecEnv (as required by Stable Baselines)
+    env = DummyVecEnv([lambda: MusicAccompanistEnv(data, window_size=10)])
+    
+    # Initialize the RecurrentPPOAgent (no pretrained model file)
+    agent = RecurrentPPOAgent(env)
+    
+    # Train the agent (each step corresponds to one note in the sequence)
+    agent.learn(total_timesteps=100000, log_interval=10, verbose=1)
+    
+    # Save the trained model
+    agent.save("recurrent_ppo_music_accompanist")
