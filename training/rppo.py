@@ -28,17 +28,17 @@ class MusicAccompanistEnv(gym.Env):
 
         # Observation: a 4 x window_size tensor.
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(2, window_size), dtype=np.float32
+            low=-np.inf, high=np.inf, shape=(2, window_size - 1), dtype=np.float32
         )
         # Action: A single continuous speed factor.
         self.action_space = spaces.Box(
-            low=0.5, high=1.5, shape=(1,), dtype=np.float32
+            low=0.5, high=2.0, shape=(1,), dtype=np.float32
         )
 
     def reset(self):
         """Reset the environment to the beginning of an episode."""
         self.current_index = self.window_size
-        return self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
+        return self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
 
     def step(self, action):
         """
@@ -47,25 +47,30 @@ class MusicAccompanistEnv(gym.Env):
         is to the soloist's actual timing.
         """
         # Extract the current reference and soloist timing
-        ref_timing = self.data[1, self.current_index]
-        solo_timing = self.data[0, self.current_index]
+        ref_timing = self.data[1, self.current_index] - self.data[1, self.current_index - 1]
+        solo_timing = self.data[0, self.current_index] - self.data[0, self.current_index - 1]
         speed_factor = action[0]
         predicted_timing = ref_timing * speed_factor
-        
-        # Reward: We want predicted_timing / solo_timing to be as close to 1 as possible.
-        ratio_diff = abs(predicted_timing / solo_timing - 1)
-        reward = -ratio_diff  # Smaller difference yields a higher reward
+
+        reward = self.reward_function(predicted_timing, solo_timing)
         
         # Move the window forward by one note
         self.current_index += 1
         done = (self.current_index >= self.n_notes)
         
         if not done:
-            obs = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
+            obs = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+            if self.current_index % 100 == 0:
+                print(f"Current observation: {obs}, Reward: {reward}")
         else:
-            obs = np.zeros((2, self.window_size), dtype=np.float32)
+            obs = np.zeros((2, self.window_size - 1), dtype=np.float32)
         info = {}
         return obs, reward, done, info
+
+    def reward_function(self, predicted_timing, solo_timing):
+        ratio_diff = abs(predicted_timing / solo_timing - 1)
+        reward = -ratio_diff
+        return reward
 
     def render(self, mode='human'):
         pass
@@ -90,7 +95,6 @@ class RecurrentPPOAgent:
     def _initialize(self) -> None:
         if self.file_path is None:
             # Create the RecurrentPPO model using an LSTM policy.
-            # Note: the environment is set later in the learn() method.
             self.model = RecurrentPPO("MlpLstmPolicy", self.env, verbose=0)
         else:
             self.model = RecurrentPPO.load(self.file_path)
@@ -125,21 +129,41 @@ class RecurrentPPOAgent:
         self.model.verbose = verbose
         self.model.learn(total_timesteps=total_timesteps, log_interval=log_interval)
 
-# -----------------------------
-# Training Example
-# -----------------------------
+
+def test_trained_agent(agent, env, n_episodes=5):
+    for episode in range(n_episodes):
+        obs = env.reset()  # Reset the environment for a new episode
+        agent.reset()      # Reset agent's LSTM states and episode_start flag
+        done = False
+        total_reward = 0.0
+        step_count = 0
+        
+        while not done:
+            # Use the agent to predict an action given the current observation.
+            action = agent.predict(obs)
+            
+            # Take a step in the environment with the predicted action.
+            obs, reward, done, info = env.step(action)
+            total_reward += reward[0]  # reward is wrapped in an array because of DummyVecEnv
+            step_count += 1
+            
+            # Optionally, print or log details about each step.
+            print(f"Episode: {episode+1}, Step: {step_count}, Action: {action}, Reward: {reward[0]}")
+        
+        print(f"Episode {episode+1} finished with total reward: {total_reward}\n")
+
+
 if __name__ == "__main__":
     # Generate dummy 4 x n_notes data for demonstration.
     data = prepare_tensor("assets/real_chopin.mid", "assets/reference_chopin.mid").T
-    
-    # Wrap the custom environment in a DummyVecEnv (as required by Stable Baselines)
-    env = DummyVecEnv([lambda: MusicAccompanistEnv(data, window_size=10)])
-    
-    # Initialize the RecurrentPPOAgent (no pretrained model file)
+
+    env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], window_size=10)])
     agent = RecurrentPPOAgent(env)
     
-    # Train the agent (each step corresponds to one note in the sequence)
-    agent.learn(total_timesteps=100000, log_interval=10, verbose=1)
+    agent.learn(total_timesteps=10000, log_interval=10, verbose=1)
+    agent.save("recurrent_ppo_music_accompanist")
+
+    # agent.model = agent.model.load("recurrent_ppo_music_accompanist")
+    # test_trained_agent(agent, env, n_episodes=5)  
     
     # Save the trained model
-    agent.save("recurrent_ppo_music_accompanist")

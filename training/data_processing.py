@@ -13,22 +13,28 @@ def midi_to_note(midi_number):
     
     return f"{note_name}{octave}"
 
-def extract_notes_from_midi(file_path):
+def extract_notes_from_midi(file_path, include_notes=False):
     """Extract note and timing information from a MIDI file."""
     midi = mido.MidiFile(file_path)
-    notes = np.empty((0, 1), dtype=object)  # Initialize an empty numpy array with object dtype for mixed types
+    if include_notes:
+        notes = np.empty((0, 3), dtype=object)  
+    else:
+        notes = np.empty((0, 1), dtype=object)
     current_time = 0  # To track absolute timing
 
     for track in midi.tracks:
         for msg in track:
-            if msg.type in ["note_on", "note_off"]:  # We're only interested in note events
+            if msg.type in ["note_on", "note_off", "control_change"]:  # We're only interested in note events
                 current_time += msg.time / 480  # Update timing (delta time format)
-
                 if msg.type == "note_on" and msg.velocity > 0:  # Ignore note-off and zero-velocity note-ons
                     # new_note = np.array([[midi_to_note(int(msg.note)), current_time]], dtype=object)
-                    new_note = np.array([[current_time]], dtype=object)
+                    if include_notes:
+                        new_note = np.array([[msg, midi_to_note(int(msg.note)), current_time]], dtype=object)
+                        # new_note = np.array([[int(msg.note), current_time]], dtype=object)
+                    else:
+                        new_note = np.array([[current_time]], dtype=object)
                     notes = np.append(notes, new_note, axis=0)
-
+    
     return notes  # Already a numpy array
 
 def pick_pieces(pieces = ["Ballade No. 1 in G Minor, Op. 23"]):
@@ -42,8 +48,8 @@ def pick_pieces(pieces = ["Ballade No. 1 in G Minor, Op. 23"]):
 
     
 def prepare_tensor(live_midi, reference_midi):
-    live_tensor = extract_notes_from_midi(live_midi)
-    reference_tensor = extract_notes_from_midi(reference_midi)
+    live_tensor= extract_notes_from_midi(live_midi, include_notes=True)
+    reference_tensor= extract_notes_from_midi(reference_midi)
 
     # The code below was used to check for alignment between the two tensors
     # for i, (a, b) in enumerate(zip(live_tensor[2200:], reference_tensor[2200:])):
@@ -61,4 +67,9 @@ def prepare_tensor(live_midi, reference_midi):
 
 
 if __name__ == "__main__":
-    prepare_tensor("assets/real_chopin.mid", "assets/reference_chopin.mid")
+    tensor = prepare_tensor("assets/real_chopin.mid", "assets/reference_chopin.mid")
+    for i in range(len(tensor) - 1):
+        if tensor[i + 1][2] - tensor[i][2] == 0: # 0 division error for the model
+            print(f"anomoly found at point {i + 1}")
+            print(tensor[i - 10: i + 10])
+            break
