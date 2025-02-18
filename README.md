@@ -23,5 +23,5 @@ The agent is trained using a custom Gym environment and the [RecurrentPPO](https
 
 ## Current Progress
 - Finished and tested complete soloist-detection, accompanist playback, and DTW algorithm
-- Finished data cleaning on Chopin's Ballade No. 1. This is the training data I used for the current RPPO agent, because this ballade has a diverse range of musical expressions that will help the agent better understand a soloist. In reality, the model may need to be finetuned to specific genres. I used the live performance MIDI file from [The MAESTRO Dataset](https://magenta.tensorflow.org/datasets/maestro) . Data 
+- Finished data cleaning on Chopin's Ballade No. 1. This is the training data I used for the current RPPO agent, because this ballade has a diverse range of musical expressions that will help the agent better understand a soloist. In reality, the model may need to be finetuned to specific genres. I used the live performance MIDI file from [The MAESTRO Dataset](https://magenta.tensorflow.org/datasets/maestro) and the default, metronomic performance MIDI file from [Online Sequencer](https://onlinesequencer.net/1771756). Data 
   
