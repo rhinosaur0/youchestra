@@ -3,6 +3,7 @@ from gym import spaces
 import numpy as np
 from typing import Optional
 from data_processing import prepare_tensor
+from math import log
 
 class MusicAccompanistEnv(gym.Env):
     """
@@ -10,39 +11,33 @@ class MusicAccompanistEnv(gym.Env):
     
     Observations: A sliding window (4 x window_size) from the input data.
        - Row 0: Reference pitch
-       - Row 1: Reference pitch's metronomic timing
-       - Row 2: Soloist pitch
-       - Row 3: Soloist pitch timing
+       - Row 1: Soloist pitch timing
+       - Row 2: Reference pitch's metronomic timing
     
-    Action: A continuous speed adjustment factor (e.g., between 0.5 and 1.5).
-    
-    Reward: Negative absolute difference of the ratio 
-            ( (reference timing * speed_factor) / soloist timing ) from 1.
+    Action: A continuous speed adjustment factor (e.g., between 0.3 and 3.0).
     """
     def __init__(self, data, window_size=10):
         super(MusicAccompanistEnv, self).__init__()
         self.data = data 
         self.n_notes = self.data.shape[1]
         self.window_size = window_size
-        self.current_index = window_size  # start after the first window
+        self.current_index = window_size  
 
-        # Observation: a 4 x window_size tensor.
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(2, window_size - 1), dtype=np.float32
         )
         # Action: A single continuous speed factor.
         self.action_space = spaces.Box(
-            low=0.5, high=2.0, shape=(1,), dtype=np.float32
+            low=0.3, high=3.0, shape=(1,), dtype=np.float32
         )
 
     def reset(self):
-        """Reset the environment to the beginning of an episode."""
         self.current_index = self.window_size
         return self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
 
     def step(self, action):
         """
-        Apply the speed adjustment factor (action) to the reference timing,
+        Apply the speed adjustment factor to the reference timing,
         then compute the reward based on how close the predicted timing (ref_timing * action)
         is to the soloist's actual timing.
         """
@@ -54,21 +49,21 @@ class MusicAccompanistEnv(gym.Env):
 
         reward = self.reward_function(predicted_timing, solo_timing)
         
-        # Move the window forward by one note
         self.current_index += 1
         done = (self.current_index >= self.n_notes)
         
         if not done:
             obs = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+            obs = obs - obs[:, 0:1]
             if self.current_index % 100 == 0:
-                print(f"Current observation: {obs}, Reward: {reward}")
+                print(f"Current observation: {obs}, Reward: {reward}, Action: {action}")
         else:
             obs = np.zeros((2, self.window_size - 1), dtype=np.float32)
         info = {}
         return obs, reward, done, info
 
     def reward_function(self, predicted_timing, solo_timing):
-        ratio_diff = abs(predicted_timing / solo_timing - 1)
+        ratio_diff = log(predicted_timing / solo_timing) ** 2
         reward = -ratio_diff
         return reward
 
@@ -147,7 +142,6 @@ def test_trained_agent(agent, env, n_episodes=5):
             total_reward += reward[0]  # reward is wrapped in an array because of DummyVecEnv
             step_count += 1
             
-            # Optionally, print or log details about each step.
             print(f"Episode: {episode+1}, Step: {step_count}, Action: {action}, Reward: {reward[0]}")
         
         print(f"Episode {episode+1} finished with total reward: {total_reward}\n")
@@ -160,10 +154,9 @@ if __name__ == "__main__":
     env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], window_size=10)])
     agent = RecurrentPPOAgent(env)
     
-    agent.learn(total_timesteps=10000, log_interval=10, verbose=1)
-    agent.save("recurrent_ppo_music_accompanist")
+    # agent.learn(total_timesteps=10000, log_interval=10, verbose=1)
+    # agent.save("recurrent_ppo_music_accompanist")
 
-    # agent.model = agent.model.load("recurrent_ppo_music_accompanist")
-    # test_trained_agent(agent, env, n_episodes=5)  
+    agent.model = agent.model.load("recurrent_ppo_music_accompanist")
+    test_trained_agent(agent, env, n_episodes=5) 
     
-    # Save the trained model
