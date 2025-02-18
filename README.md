@@ -13,10 +13,15 @@ The agent is trained using a custom Gym environment and the [RecurrentPPO](https
 
 ## Features
 - Soloist melody detection and accompanist playback using Mido
-  Created Dynamic Time Warping algorithm to accurately track the soloist's location in the performance in reference to the soloist MIDI file.
+  Created Dynamic Time Warping (DTW) algorithm to accurately track the soloist's location in the performance in reference to the soloist MIDI file.
 
 - **Custom Gym Environment:**  
-  Provides a sliding window of observations that include performance times and optional bar line markers.
+  Provides a sliding window of observations that include performance times and optional bar line markers. The agent uses the previous window to predict the speed change of the soloist in the next few notes. 
 
 - **Recurrent PPO Agent:**  
   Utilizes an LSTM policy to capture sequential musical context over time.
+
+## Current Progress
+- Finished and tested complete soloist-detection, accompanist playback, and DTW algorithm
+- Finished data cleaning on Chopin's Ballade No. 1. 
+  
