@@ -1,3 +1,4 @@
+# deprecated 
 def parse_midi(midi_path):
     from music21 import converter
     """
@@ -97,7 +98,6 @@ class Note:
 
 
 if __name__ == "__main__":
-    print(parse_midi("assets/solo.mid")[0][:10])
-    print(extract_midi_onsets_and_pitches("assets/solo.mid")[:, :10])
+    print(extract_midi_onsets_and_pitches("assets/reference_chopin.mid")[:, :30])
 
 
