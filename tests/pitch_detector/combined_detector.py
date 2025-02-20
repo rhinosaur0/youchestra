@@ -20,7 +20,7 @@ stream = p.open(format=pyaudio.paFloat32,
                 channels=1, rate=44100, input=True,
                 input_device_index=0, frames_per_buffer=hop_s)
 
-pitch_o = pitch("yin",win_s,hop_s,samplerate)
+pitch_o = pitch("pyin",win_s,hop_s,samplerate)
 #pitch_o.set_unit("")
 pitch_o.set_tolerance(tolerance)
 

@@ -57,11 +57,9 @@ class Conductor:
             if not self.cached_solo_pitch_start_time or self.cached_solo_pitch_start_time != self.solo_pitch_history[0][0]:
                 self.cached_solo_pitch_start_time = self.solo_pitch_history[0][0]
 
-                # Recompute the reference pitches based on the new start time
                 new_window = []
                 i = soloist_first_event - 16
-                while i < 0 or self.solo_events[i][0] < soloist_progression - 8 * default_sec_per_beat:
-                    i += 1
+                while i < 0 or self.solo_events[i][0] < soloist_progression - 8 * default_sec_per_beat: i += 1
                 while self.solo_events[i][0] < soloist_progression + 8 * default_sec_per_beat and i - soloist_first_event < 16:
                     new_window.append(self.solo_events[i])
                     i += 1

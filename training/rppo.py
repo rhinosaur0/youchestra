@@ -7,14 +7,11 @@ from math import log
 
 class MusicAccompanistEnv(gym.Env):
     """
-    A custom Gym environment for a music accompanist.
     
-    Observations: A sliding window (4 x window_size) from the input data.
+    Observations: A sliding window (3 x window_size) from the input data.
        - Row 0: Reference pitch
        - Row 1: Soloist pitch timing
        - Row 2: Reference pitch's metronomic timing
-    
-    Action: A continuous speed adjustment factor (e.g., between 0.3 and 3.0).
     """
     def __init__(self, data, window_size=10):
         super(MusicAccompanistEnv, self).__init__()
@@ -26,7 +23,7 @@ class MusicAccompanistEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(2, window_size - 1), dtype=np.float32
         )
-        # Action: A single continuous speed factor.
+
         self.action_space = spaces.Box(
             low=0.3, high=3.0, shape=(1,), dtype=np.float32
         )
@@ -54,7 +51,7 @@ class MusicAccompanistEnv(gym.Env):
         
         if not done:
             obs = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
-            obs = obs - obs[:, 0:1]
+            obs = obs - obs[:, 0:1] # normalize by setting the first time to 0
             if self.current_index % 100 == 0:
                 print(f"Current observation: {obs}, Reward: {reward}, Action: {action}")
         else:
@@ -69,7 +66,6 @@ class MusicAccompanistEnv(gym.Env):
 
     def render(self, mode='human'):
         pass
-
 
 
 from sb3_contrib import RecurrentPPO
@@ -89,7 +85,6 @@ class RecurrentPPOAgent:
 
     def _initialize(self) -> None:
         if self.file_path is None:
-            # Create the RecurrentPPO model using an LSTM policy.
             self.model = RecurrentPPO("MlpLstmPolicy", self.env, verbose=0)
         else:
             self.model = RecurrentPPO.load(self.file_path)
@@ -110,7 +105,6 @@ class RecurrentPPOAgent:
             episode_start=self.episode_starts,
             deterministic=True
         )
-        # After the first call in an episode, set episode_starts to False.
         self.episode_starts = np.zeros((1,), dtype=bool)
         return action
 
@@ -134,10 +128,7 @@ def test_trained_agent(agent, env, n_episodes=5):
         step_count = 0
         
         while not done:
-            # Use the agent to predict an action given the current observation.
             action = agent.predict(obs)
-            
-            # Take a step in the environment with the predicted action.
             obs, reward, done, info = env.step(action)
             total_reward += reward[0]  # reward is wrapped in an array because of DummyVecEnv
             step_count += 1
@@ -148,7 +139,6 @@ def test_trained_agent(agent, env, n_episodes=5):
 
 
 if __name__ == "__main__":
-    # Generate dummy 4 x n_notes data for demonstration.
     data = prepare_tensor("assets/real_chopin.mid", "assets/reference_chopin.mid").T
 
     env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], window_size=10)])

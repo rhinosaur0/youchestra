@@ -12,7 +12,7 @@ stream = p.open(format=pyaudio.paFloat32,
 # Aubio setup
 samplerate = 44100
 win_s = 1024  # Larger window size for lower frequency detection
-hop_s = 512  # Larger hop size to analyze less frequently
+hop_s = 256  # Larger hop size to analyze less frequently
 
 # Onset detector
 onset_o = aubio.onset("default", win_s, hop_s, samplerate)
@@ -28,7 +28,7 @@ energy_values = []  # To store energy levels
 
 # Variables for energy comparison
 prev_energy = 0
-energy_threshold = 0.004  # Larger minimum increase in energy to consider an onset
+energy_threshold = 0.005  # Larger minimum increase in energy to consider an onset
 min_time_gap = 0.1  # Minimum time between onsets (100ms)
 last_onset_time = None
 energy_cum = [0] * 5
@@ -50,7 +50,7 @@ try:
 
         onset = onset_o(samples)
         current_time = frame_count * hop_s / samplerate
-        if current_energy > energy_cum[-1] + energy_threshold and pitch > 0:
+        if current_energy > energy_cum[-2] + energy_threshold and pitch > 0:
             # Suppress frequent onsets
             if last_onset_time is None or (current_time - last_onset_time) > min_time_gap:
                 last_onset_time = current_time
