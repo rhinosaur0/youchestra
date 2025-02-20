@@ -4,6 +4,7 @@ import numpy as np
 from typing import Optional
 from data_processing import prepare_tensor
 from math import log
+import pretty_midi
 
 class MusicAccompanistEnv(gym.Env):
     """
@@ -30,7 +31,9 @@ class MusicAccompanistEnv(gym.Env):
 
     def reset(self):
         self.current_index = self.window_size
-        return self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+        first_obs = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+        print(f"First observation: {first_obs}")
+        return first_obs
 
     def step(self, action):
         """
@@ -52,11 +55,11 @@ class MusicAccompanistEnv(gym.Env):
         if not done:
             obs = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
             obs = obs - obs[:, 0:1] # normalize by setting the first time to 0
-            if self.current_index % 100 == 0:
-                print(f"Current observation: {obs}, Reward: {reward}, Action: {action}")
+            if self.current_index < 30:
+                print(f"Current index: {self.current_index}, Reward: {reward}, Action: {action}")
         else:
             obs = np.zeros((2, self.window_size - 1), dtype=np.float32)
-        info = {}
+        info = {"predicted_timing": predicted_timing}
         return obs, reward, done, info
 
     def reward_function(self, predicted_timing, solo_timing):
@@ -119,34 +122,81 @@ class RecurrentPPOAgent:
         self.model.learn(total_timesteps=total_timesteps, log_interval=log_interval)
 
 
-def test_trained_agent(agent, env, n_episodes=5):
+def test_trained_agent(agent, env, n_episodes=1):
+    """
+    Run one or more episodes with the trained agent and record the predicted timings.
+    Returns a list of predicted timing sequences (one per episode).
+    """
+    episodes_timings = []
     for episode in range(n_episodes):
-        obs = env.reset()  # Reset the environment for a new episode
-        agent.reset()      # Reset agent's LSTM states and episode_start flag
+        obs = env.reset()  # Reset environment
+        agent.reset()      # Reset agent's LSTM states
         done = False
         total_reward = 0.0
-        step_count = 0
+        predicted_timings = []
         
         while not done:
             action = agent.predict(obs)
             obs, reward, done, info = env.step(action)
-            total_reward += reward[0]  # reward is wrapped in an array because of DummyVecEnv
-            step_count += 1
-            
-            print(f"Episode: {episode+1}, Step: {step_count}, Action: {action}, Reward: {reward[0]}")
+            # Save the predicted timing from this step
+            predicted_timings.append(info[0].get("predicted_timing"))
+            total_reward += reward[0]
+            # print(f"Episode: {episode+1}, Action: {action}, Reward: {reward[0]:.4f}, Predicted Timing: {info[0].get('predicted_timing'):.4f}, Note: {info[0].get('note')}")
         
-        print(f"Episode {episode+1} finished with total reward: {total_reward}\n")
+        episodes_timings.append(predicted_timings)
+    return episodes_timings
 
 
+def write_midi_from_timings(timings, notes, output_midi_file="output.mid", default_duration=0.3):
+    """
+    Given a sequence of predicted timing differences, compute cumulative onset times and write a MIDI file.
+    Each note is assigned a constant pitch and fixed duration.
+    """
+    # Compute cumulative onset times: first note starts at time 0.
+    note_onsets = [0]
+    for a, t in enumerate(timings):
+        if a < 20:
+            print(f"Timing: {t}")
+        note_onsets.append(note_onsets[-1] + t)
+    
+    # Create a PrettyMIDI object and a piano instrument.
+    pm = pretty_midi.PrettyMIDI()
+    piano_program = pretty_midi.instrument_name_to_program('Acoustic Grand Piano')
+    piano = pretty_midi.Instrument(program=piano_program)
+    
+    # Create MIDI note events.
+    print(len(note_onsets), len(notes))
+    for onset, note in zip(note_onsets, notes[9:]):
+
+        start_time = onset
+        end_time = onset + default_duration  # fixed note duration
+        note = pretty_midi.Note(velocity=100, pitch=note, start=start_time, end=end_time)
+        piano.notes.append(note)
+    
+    pm.instruments.append(piano)
+    pm.write(output_midi_file)
+    print(f"MIDI file written to {output_midi_file}")
+
+# ----------------------------
+# Main Testing Script
+# ----------------------------
 if __name__ == "__main__":
     data = prepare_tensor("assets/real_chopin.mid", "assets/reference_chopin.mid").T
 
     env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], window_size=10)])
     agent = RecurrentPPOAgent(env)
     
+    # Uncomment these lines to train/save the model if needed.
     # agent.learn(total_timesteps=10000, log_interval=10, verbose=1)
     # agent.save("recurrent_ppo_music_accompanist")
+    
+    # Load a pretrained model.
+    agent.model = agent.model.load("models/0216")
+    episodes_timings = test_trained_agent(agent, env, n_episodes=1)
+    predicted_timings = episodes_timings[0]
 
-    agent.model = agent.model.load("recurrent_ppo_music_accompanist")
-    test_trained_agent(agent, env, n_episodes=5) 
+    print(data[1:, 10:30])
+ 
+    write_midi_from_timings(predicted_timings, data[0, :], output_midi_file="adjusted_output.mid", default_duration=0.3)
+
     

@@ -4,11 +4,12 @@ from playback_engine import AccompanimentPlayer
 from conductor import Conductor
 import threading
 import time
+import argparse
 
-def main():
+def main(args):
 
-    solo_midi_path = "assets/solo.mid"
-    accomp_midi_path = "assets/accompaniment.mid"
+    solo_midi_path = args.solo_midi_path
+    accomp_midi_path = args.accomp_midi_path
     default_sec_per_beat = 0.3
     
 
@@ -45,5 +46,11 @@ def main():
         accomp_player.stop_playback()
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+                    prog='ProgramName',
+                    description='What the program does',
+                    epilog='Text at the bottom of help')
+    parser.add_argument('-s', '--solo_midi_path', type=str, help='path to solo midi file', default='assets/solo.mid')
+    parser.add_argument('-a', '--accomp_midi_path', type=str, help='path to accompaniment midi file', default='assets/accompaniment.mid')
+    main(parser.parse_args())
 
