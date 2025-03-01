@@ -1,16 +1,8 @@
 import pandas as pd
 import numpy as np
 
-NUMBER_TO_NOTE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+from utils.midi_utils import extract_midi_onsets_and_pitches
 
-def midi_to_note(midi_number):
-    if not (0 <= midi_number <= 127):
-        return "Invalid MIDI number (must be between 0 and 127)"
-    
-    note_name = NUMBER_TO_NOTE[midi_number % 12]
-    octave = (midi_number // 12) - 1
-    
-    return f"{note_name}{octave}"
 
 def pick_pieces(pieces = ["Ballade No. 1 in G Minor, Op. 23"]):
     base_path = "training_data/maestro-v3.0.0/"
@@ -21,32 +13,6 @@ def pick_pieces(pieces = ["Ballade No. 1 in G Minor, Op. 23"]):
     filtered_data = filtered_data["midi_filename"].tolist()
 
 
-def extract_midi_onsets_and_pitches(midi_file, include_notes = False, instrument_index=0):
-    """
-    Extract note onset times and pitches from a MIDI file.
-    
-    Args:
-      midi_file (str): Path to the MIDI file.
-      instrument_index (int): Which instrument track to use (default is 0).
-    
-    Returns:
-      onset_times (np.array): Array of note onset times (in seconds).
-      pitches (np.array): Array of corresponding MIDI pitch numbers.
-    """
-    import pretty_midi
-    import numpy as np
-    pm = pretty_midi.PrettyMIDI(midi_file)
-    # Select an instrument (assumes that the desired soloist is in one track)
-    instrument = pm.instruments[instrument_index]
-    # Sort the notes by their start time
-    notes = sorted(instrument.notes, key=lambda note: note.start)
-    onset_times = np.array([note.start for note in notes])
-    pitches = np.array([note.pitch for note in notes])
-    if include_notes:
-        return np.stack((pitches, onset_times))
-    return onset_times
-
-    
 def prepare_tensor(live_midi, reference_midi, include_everything=False):
     live_tensor= extract_midi_onsets_and_pitches(live_midi, include_notes = True)
     reference_tensor= extract_midi_onsets_and_pitches(reference_midi)

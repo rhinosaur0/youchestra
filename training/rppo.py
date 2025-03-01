@@ -7,6 +7,7 @@ import json
 from math import log
 
 from data_processing import prepare_tensor
+from utils.midi_utils import write_midi_from_timings
 
 
 
@@ -31,6 +32,7 @@ class MusicAccompanistEnv(gym.Env):
         self.window_size = self.config['window_size']
         self.current_index = self.window_size
         self.observation_space = spaces.Box(low = 0.0, high = 50.0, shape = self.obs_space, dtype = np.float32)
+        print(self.observation_space)
         self.action_space = spaces.Box(low=0.3, high=3.0, shape=(1,), dtype=np.float32)
 
     def reset(self):
@@ -69,8 +71,8 @@ class MusicAccompanistEnv(gym.Env):
         
         if not done:
             obs = self.obs_prep(False)
-            if self.current_index % 10 == 0:
-                print(f"Current index: {self.current_index}, Reward: {reward}, Action: {action}")
+            # if self.current_index % 10 == 0:
+            #     print(f"Current index: {self.current_index}, Reward: {reward}, Action: {action}")
         else:
             obs = np.zeros(self.obs_space, dtype=np.float32)
         info = {"predicted_timing": predicted_timing}
@@ -160,52 +162,27 @@ def test_trained_agent(agent, env, n_episodes=1):
         episodes_timings.append(predicted_timings)
     return episodes_timings
 
-def write_midi_from_timings(timings, notes, output_midi_file="output.mid", default_duration=0.3):
-    """
-    Given a sequence of predicted timing differences, compute cumulative onset times and write a MIDI file.
-    Each note is assigned a constant pitch and fixed duration.
-    """
-    # Compute cumulative onset times: first note starts at time 0.
-    note_onsets = [0]
-    for a, t in enumerate(timings):
-        note_onsets.append(note_onsets[-1] + t)
-    
-    # Create a PrettyMIDI object and a piano instrument.
-    pm = pretty_midi.PrettyMIDI()
-    piano_program = pretty_midi.instrument_name_to_program('Acoustic Grand Piano')
-    piano = pretty_midi.Instrument(program=piano_program)
-    
-    print(len(note_onsets), len(notes))
-    for onset, note in zip(note_onsets, notes[9:]):
 
-        start_time = onset
-        end_time = onset + default_duration  # fixed note duration
-        note = pretty_midi.Note(velocity=100, pitch=int(note), start=start_time, end=end_time)
-        piano.notes.append(note)
-    
-    pm.instruments.append(piano)
-    pm.write(output_midi_file)
-    print(f"MIDI file written to {output_midi_file}")
 
 # ----------------------------
 # Main Testing Script
 # ----------------------------
 if __name__ == "__main__":
-    data = prepare_tensor("assets/real_chopin.mid", "assets/reference_chopin.mid")
+    data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
 
 
-    env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], "training/rppoconfig.json", "1row+next")])
+    env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], "rppoconfig.json", "2row")])
     agent = RecurrentPPOAgent(env)
     
     # Uncomment these lines to train/save the model if needed.
-    agent.learn(total_timesteps=20000, log_interval=10, verbose=1)
-    agent.save("recurrent_ppo_music_accompanist")
+    # agent.learn(total_timesteps=20000, log_interval=10, verbose=1)
+    # agent.save("recurrent_ppo_music_accompanist")
     
     # Load a pretrained model.
-    # agent.model = agent.model.load("models/0220_05")
-    # episodes_timings = test_trained_agent(agent, env, n_episodes=1)
-    # predicted_timings = episodes_timings[0]
+    agent.model = agent.model.load("../models/0301/0301_02")
+    episodes_timings = test_trained_agent(agent, env, n_episodes=1)
+    predicted_timings = episodes_timings[0]
 
-    # write_midi_from_timings(predicted_timings, data[0, :], output_midi_file="adjusted_output.mid", default_duration=0.3)
+    write_midi_from_timings(predicted_timings, data[0, :], output_midi_file="adjusted_output.mid", default_duration=0.3)
 
     
