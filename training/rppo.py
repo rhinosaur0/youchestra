@@ -2,10 +2,11 @@ import gym
 from gym import spaces
 import numpy as np
 from typing import Optional
-from data_processing import prepare_tensor
-from math import log
 import pretty_midi
+import json
+from math import log
 
+from data_processing import prepare_tensor
 
 
 
@@ -17,40 +18,37 @@ class MusicAccompanistEnv(gym.Env):
        - Row 1: Soloist pitch timing
        - Row 2: Reference pitch's metronomic timing
     """
-    def __init__(self, data, window_size=10):
+    def __init__(self, data, config_file, option):
         super(MusicAccompanistEnv, self).__init__()
         self.data = data 
         self.n_notes = self.data.shape[1]
-        self.window_size = window_size
-        self.current_index = window_size  
+        self.option = option
 
-        self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(2 * (self.window_size) + 1,), dtype=np.float32
-        )
+        with open(config_file, 'r') as f:
+            self.config = json.load(f)
 
-        self.action_space = spaces.Box(
-            low=0.3, high=3.0, shape=(1,), dtype=np.float32
-        )
+        self.obs_space = self.config['option'][option]['observation_space']
+        self.window_size = self.config['window_size']
+        self.current_index = self.window_size
+        self.observation_space = spaces.Box(low = 0.0, high = 50.0, shape = self.obs_space, dtype = np.float32)
+        self.action_space = spaces.Box(low=0.3, high=3.0, shape=(1,), dtype=np.float32)
 
     def reset(self):
-        # self.current_index = self.window_size
-        # first_window = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
-        # first_window = first_window - first_window[:, 0:1] # normalize by setting the first time to 0
-        # first_pred_note = self.data[1, self.current_index]
-        # first_pred_tensor = np.full((1, self.window_size), first_pred_note)
-        # first_obs = np.vstack((first_window, first_pred_tensor))
-        # return first_obs
+        return self.obs_prep(True)
     
-        self.current_index = self.window_size
-        first_obs = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
-        first_obs = first_obs - first_obs[:, 0:1]  # Normalize by setting the first time to 0
-        
-        # Flatten the 2D window and append the additional float
-        next_note_onset = self.data[1, self.current_index]  # Example: soloist's next note onset
-        first_obs = np.concatenate([first_obs.flatten(), [next_note_onset]])  # Shape: (2 * (window_size - 1) + 1)
-        
-        print(f"First observation: {first_obs}")
-        return first_obs
+    def obs_prep(self, reset):
+        if reset:
+            self.current_index = self.window_size
+        match self.option:
+            case "2row":
+                next_window = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
+                next_window = next_window - next_window[:, 0:1]
+                return next_window
+            case "1row+next":
+                next_window = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
+                next_window = next_window - next_window[:, 0:1] # normalize by setting the first time to 0
+                next_pred_note = self.data[1, self.current_index]
+                return np.concatenate([next_window.flatten(), [next_pred_note]])
 
     def step(self, action):
         """
@@ -70,17 +68,11 @@ class MusicAccompanistEnv(gym.Env):
         done = (self.current_index >= self.n_notes)
         
         if not done:
-            next_window = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
-            next_window = next_window - next_window[:, 0:1] # normalize by setting the first time to 0
-            next_pred_note = self.data[1, self.current_index]
-            # next_pred_tensor = np.full((1, self.window_size), next_pred_note)
-            # obs = np.vstack((next_window, next_pred_tensor))
-            obs = np.concatenate([next_window.flatten(), [next_pred_note]])
-            # obs = next_window
+            obs = self.obs_prep(False)
             if self.current_index % 10 == 0:
                 print(f"Current index: {self.current_index}, Reward: {reward}, Action: {action}")
         else:
-            obs = np.zeros((2 * (self.window_size) + 1,), dtype=np.float32)
+            obs = np.zeros(self.obs_space, dtype=np.float32)
         info = {"predicted_timing": predicted_timing}
         return obs, reward, done, info
 
@@ -168,7 +160,6 @@ def test_trained_agent(agent, env, n_episodes=1):
         episodes_timings.append(predicted_timings)
     return episodes_timings
 
-
 def write_midi_from_timings(timings, notes, output_midi_file="output.mid", default_duration=0.3):
     """
     Given a sequence of predicted timing differences, compute cumulative onset times and write a MIDI file.
@@ -177,8 +168,6 @@ def write_midi_from_timings(timings, notes, output_midi_file="output.mid", defau
     # Compute cumulative onset times: first note starts at time 0.
     note_onsets = [0]
     for a, t in enumerate(timings):
-        if a < 20:
-            print(f"Timing: {t}")
         note_onsets.append(note_onsets[-1] + t)
     
     # Create a PrettyMIDI object and a piano instrument.
@@ -205,18 +194,18 @@ if __name__ == "__main__":
     data = prepare_tensor("assets/real_chopin.mid", "assets/reference_chopin.mid")
 
 
-    env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], window_size=10)])
+    env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], "training/rppoconfig.json", "1row+next")])
     agent = RecurrentPPOAgent(env)
     
     # Uncomment these lines to train/save the model if needed.
-    # agent.learn(total_timesteps=10000, log_interval=10, verbose=1)
-    # agent.save("recurrent_ppo_music_accompanist")
+    agent.learn(total_timesteps=20000, log_interval=10, verbose=1)
+    agent.save("recurrent_ppo_music_accompanist")
     
     # Load a pretrained model.
-    agent.model = agent.model.load("models/0220_05")
-    episodes_timings = test_trained_agent(agent, env, n_episodes=1)
-    predicted_timings = episodes_timings[0]
- 
-    write_midi_from_timings(predicted_timings, data[0, :], output_midi_file="adjusted_output.mid", default_duration=0.3)
+    # agent.model = agent.model.load("models/0220_05")
+    # episodes_timings = test_trained_agent(agent, env, n_episodes=1)
+    # predicted_timings = episodes_timings[0]
+
+    # write_midi_from_timings(predicted_timings, data[0, :], output_midi_file="adjusted_output.mid", default_duration=0.3)
 
     

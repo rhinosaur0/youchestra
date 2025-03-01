@@ -1,0 +1,11 @@
+{
+    "window_size": 10,
+    "option": {
+      "2row": {
+        "observation_space": [2, 10]
+      },
+      "1row+next": {
+        "observation_space": [21]
+      }
+    }
+  }
