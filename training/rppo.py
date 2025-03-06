@@ -2,12 +2,13 @@ import gym
 from gym import spaces
 import numpy as np
 from typing import Optional
-import pretty_midi
 import json
 from math import log
+import argparse
 
 from data_processing import prepare_tensor
 from utils.midi_utils import write_midi_from_timings
+from utils.files import save_model
 
 
 
@@ -32,11 +33,12 @@ class MusicAccompanistEnv(gym.Env):
         self.window_size = self.config['window_size']
         self.current_index = self.window_size
         self.observation_space = spaces.Box(low = 0.0, high = 50.0, shape = self.obs_space, dtype = np.float32)
-        print(self.observation_space)
         self.action_space = spaces.Box(low=0.3, high=3.0, shape=(1,), dtype=np.float32)
 
     def reset(self):
-        return self.obs_prep(True)
+        obs = self.obs_prep(True)
+        print(obs)
+        return obs
     
     def obs_prep(self, reset):
         if reset:
@@ -51,6 +53,11 @@ class MusicAccompanistEnv(gym.Env):
                 next_window = next_window - next_window[:, 0:1] # normalize by setting the first time to 0
                 next_pred_note = self.data[1, self.current_index]
                 return np.concatenate([next_window.flatten(), [next_pred_note]])
+            case "2row_normalized":
+                first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+                second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
+                next_window = second_note - first_note
+                return next_window
 
     def step(self, action):
         """
@@ -71,15 +78,15 @@ class MusicAccompanistEnv(gym.Env):
         
         if not done:
             obs = self.obs_prep(False)
-            # if self.current_index % 10 == 0:
-            #     print(f"Current index: {self.current_index}, Reward: {reward}, Action: {action}")
+            if self.current_index % 100 == 0:
+                print(f"Current index: {self.current_index}, Reward: {reward}, Action: {action}")
         else:
             obs = np.zeros(self.obs_space, dtype=np.float32)
         info = {"predicted_timing": predicted_timing}
         return obs, reward, done, info
 
     def reward_function(self, predicted_timing, solo_timing):
-        ratio_diff = log(predicted_timing / solo_timing) ** 2
+        ratio_diff = 5 * log(predicted_timing / solo_timing) ** 2
         reward = -ratio_diff
         return reward
 
@@ -158,8 +165,9 @@ def test_trained_agent(agent, env, n_episodes=1):
             predicted_timings.append(info[0].get("predicted_timing"))
             total_reward += reward[0]
             # print(f"Episode: {episode+1}, Action: {action}, Reward: {reward[0]:.4f}, Predicted Timing: {info[0].get('predicted_timing'):.4f}, Note: {info[0].get('note')}")
-        
+    
         episodes_timings.append(predicted_timings)
+    print(f"Total reward: {total_reward}")
     return episodes_timings
 
 
@@ -168,21 +176,30 @@ def test_trained_agent(agent, env, n_episodes=1):
 # Main Testing Script
 # ----------------------------
 if __name__ == "__main__":
+    
+    parser = argparse.ArgumentParser(description='Train a model to accompany a soloist.')
+    parser.add_argument('--traintest', '-t', type=str, help='1 to train, 2 to test', required=True)
+    args = parser.parse_args()
+
+    date = "0302"
+    model_number = "03"
+    window_size = 7
+
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
 
 
-    env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], "rppoconfig.json", "2row")])
+    env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], "rppoconfig.json", "2row_normalized")])
     agent = RecurrentPPOAgent(env)
     
     # Uncomment these lines to train/save the model if needed.
-    # agent.learn(total_timesteps=20000, log_interval=10, verbose=1)
-    # agent.save("recurrent_ppo_music_accompanist")
-    
-    # Load a pretrained model.
-    agent.model = agent.model.load("../models/0301/0301_02")
-    episodes_timings = test_trained_agent(agent, env, n_episodes=1)
-    predicted_timings = episodes_timings[0]
+    if args.traintest == '1':
+        agent.learn(total_timesteps=200000, log_interval=10, verbose=1)
+        agent.save(save_model(date, model_number))
+    elif args.traintest == '2':
+        agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
+        episodes_timings = test_trained_agent(agent, env, n_episodes=1)
+        predicted_timings = episodes_timings[0]
 
-    write_midi_from_timings(predicted_timings, data[0, :], output_midi_file="adjusted_output.mid", default_duration=0.3)
+        write_midi_from_timings(predicted_timings, data[0, :], window_size, output_midi_file="../assets/adjusted_output.mid", default_duration=0.3)
 
     

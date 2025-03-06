@@ -36,7 +36,7 @@ def extract_midi_onsets_and_pitches(midi_file, include_notes = False, instrument
         return np.stack((pitches, onset_times))
     return onset_times
 
-def write_midi_from_timings(timings, notes, output_midi_file="output.mid", default_duration=0.3):
+def write_midi_from_timings(timings, notes, window_size, output_midi_file="output.mid", default_duration=0.3):
     """
     Given a sequence of predicted timing differences, compute cumulative onset times and write a MIDI file.
     Each note is assigned a constant pitch and fixed duration.
@@ -53,7 +53,7 @@ def write_midi_from_timings(timings, notes, output_midi_file="output.mid", defau
     piano = pretty_midi.Instrument(program=piano_program)
     
     print(len(note_onsets), len(notes))
-    for onset, note in zip(note_onsets, notes[5:]):
+    for onset, note in zip(note_onsets, notes[window_size - 1:]):
 
         start_time = onset
         end_time = onset + default_duration  # fixed note duration

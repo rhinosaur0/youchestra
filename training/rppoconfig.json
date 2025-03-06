@@ -1,11 +1,14 @@
 {
-    "window_size": 6,
+    "window_size": 7,
     "option": {
       "2row": {
-        "observation_space": [2, 6]
+        "observation_space": [2, 7]
       },
       "1row+next": {
-        "observation_space": [13]
+        "observation_space": [15]
+      },
+      "2row_normalized": {
+        "observation_space": [2, 6]
       }
     }
   }
