@@ -58,6 +58,15 @@ class MusicAccompanistEnv(gym.Env):
                 second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
                 next_window = second_note - first_note
                 return next_window
+            case "2row_with_next":
+                first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+                second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
+                next_window = second_note - first_note
+                extra_next_timing = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32)
+                extra_column = np.vstack([np.zeros_like(extra_next_timing), extra_next_timing])  # shape: (2, 1)
+                observation = np.concatenate([next_window, extra_column], axis=1)  # shape: (2, window_size)
+                return observation
+
 
     def step(self, action):
         """
@@ -86,7 +95,8 @@ class MusicAccompanistEnv(gym.Env):
         return obs, reward, done, info
 
     def reward_function(self, predicted_timing, solo_timing):
-        ratio_diff = 5 * log(predicted_timing / solo_timing) ** 2
+        epsilon = 1e-8
+        ratio_diff = 5 * log((predicted_timing + epsilon) / (solo_timing + epsilon)) ** 2
         reward = -ratio_diff
         return reward
 
@@ -179,6 +189,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description='Train a model to accompany a soloist.')
     parser.add_argument('--traintest', '-t', type=str, help='1 to train, 2 to test', required=True)
+    parser.add_argument('--output_midi_file', '-o', type=str, help='output midi file', default = "../assets/adjusted_output.mid")
     args = parser.parse_args()
 
     date = "0302"
@@ -193,7 +204,7 @@ if __name__ == "__main__":
     
     # Uncomment these lines to train/save the model if needed.
     if args.traintest == '1':
-        agent.learn(total_timesteps=200000, log_interval=10, verbose=1)
+        agent.learn(total_timesteps=50000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
     elif args.traintest == '2':
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
@@ -202,4 +213,4 @@ if __name__ == "__main__":
 
         write_midi_from_timings(predicted_timings, data[0, :], window_size, output_midi_file="../assets/adjusted_output.mid", default_duration=0.3)
 
-    
+
