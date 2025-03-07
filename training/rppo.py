@@ -121,7 +121,7 @@ class RecurrentPPOAgent:
 
     def _initialize(self) -> None:
         if self.file_path is None:
-            self.model = RecurrentPPO("MlpLstmPolicy", self.env, verbose=0)
+            self.model = RecurrentPPO("MlpLstmPolicy", self.env, tensorboard_log="./tensorboard/", verbose=0)
         else:
             self.model = RecurrentPPO.load(self.file_path)
 
@@ -192,19 +192,19 @@ if __name__ == "__main__":
     parser.add_argument('--output_midi_file', '-o', type=str, help='output midi file', default = "../assets/adjusted_output.mid")
     args = parser.parse_args()
 
-    date = "0302"
-    model_number = "03"
+    date = "0306"
+    model_number = "01"
     window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
 
 
-    env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], "rppoconfig.json", "2row_normalized")])
+    env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], "rppoconfig.json", "2row_with_next")])
     agent = RecurrentPPOAgent(env)
     
     # Uncomment these lines to train/save the model if needed.
     if args.traintest == '1':
-        agent.learn(total_timesteps=50000, log_interval=10, verbose=1)
+        agent.learn(total_timesteps=200000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
     elif args.traintest == '2':
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
