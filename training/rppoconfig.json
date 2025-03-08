@@ -12,6 +12,9 @@
       },
       "2row_with_next": {
         "observation_space": [2, 7]
+      },
+      "2row_with_notes": {
+        "observation_space": [3, 7]
       }
     }
   }

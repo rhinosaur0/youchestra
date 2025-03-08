@@ -171,7 +171,6 @@ def test_trained_agent(agent, env, n_episodes=1):
         while not done:
             action = agent.predict(obs)
             obs, reward, done, info = env.step(action)
-            # Save the predicted timing from this step
             predicted_timings.append(info[0].get("predicted_timing"))
             total_reward += reward[0]
             # print(f"Episode: {episode+1}, Action: {action}, Reward: {reward[0]:.4f}, Predicted Timing: {info[0].get('predicted_timing'):.4f}, Note: {info[0].get('note')}")
@@ -192,7 +191,7 @@ if __name__ == "__main__":
     parser.add_argument('--output_midi_file', '-o', type=str, help='output midi file', default = "../assets/adjusted_output.mid")
     args = parser.parse_args()
 
-    date = "0306"
+    date = "0308"
     model_number = "01"
     window_size = 7
 
