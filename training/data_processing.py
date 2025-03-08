@@ -28,9 +28,10 @@ def prepare_tensor(live_midi, reference_midi, include_everything=False):
     return final_tensor
 
 if __name__ == "__main__":
-    tensor = prepare_tensor("assets/real_chopin.mid", "assets/reference_chopin.mid",)
-    for i in range(len(tensor) - 1):
-        if tensor[i + 1][2] - tensor[i][2] == 0: # 0 division error for the model
-            print(f"anomoly found at point {i + 1}")
-            print(tensor[i - 10: i + 10])
-            break
+    tensor = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid",)
+    tensor = tensor.T
+    for a, i in enumerate(tensor):
+        if a < 290 or a > 330:
+            continue
+        print(a, i)
+

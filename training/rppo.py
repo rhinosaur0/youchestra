@@ -20,7 +20,7 @@ class MusicAccompanistEnv(gym.Env):
        - Row 1: Soloist pitch timing
        - Row 2: Reference pitch's metronomic timing
     """
-    def __init__(self, data, config_file, option):
+    def __init__(self, data, windows, config_file, option):
         super(MusicAccompanistEnv, self).__init__()
         self.data = data 
         self.n_notes = self.data.shape[1]
@@ -31,13 +31,17 @@ class MusicAccompanistEnv(gym.Env):
 
         self.obs_space = self.config['option'][option]['observation_space']
         self.window_size = self.config['window_size']
+        self.windows = windows
         self.current_index = self.window_size
-        self.observation_space = spaces.Box(low = 0.0, high = 50.0, shape = self.obs_space, dtype = np.float32)
-        self.action_space = spaces.Box(low=0.3, high=3.0, shape=(1,), dtype=np.float32)
+        self.observation_space = spaces.Box(low = 0.0, high = 10.0, shape = self.obs_space, dtype = np.float32)
+        self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
     def reset(self):
-        obs = self.obs_prep(True)
-        print(obs)
+        if self.windows == 'all':
+            obs = self.obs_prep(True)
+        else:
+            self.current_index = self.windows[0]
+            obs = self.obs_prep(False)
         return obs
     
     def obs_prep(self, reset):
@@ -77,7 +81,7 @@ class MusicAccompanistEnv(gym.Env):
         # Extract the current reference and soloist timing
         ref_timing = self.data[1, self.current_index] - self.data[1, self.current_index - 1]
         solo_timing = self.data[0, self.current_index] - self.data[0, self.current_index - 1]
-        speed_factor = action[0]
+        speed_factor = np.exp(action[0])
         predicted_timing = ref_timing * speed_factor
 
         reward = self.reward_function(predicted_timing, solo_timing)
@@ -85,9 +89,9 @@ class MusicAccompanistEnv(gym.Env):
         self.current_index += 1
         done = (self.current_index >= self.n_notes)
         
-        if not done:
+        if (not done and self.windows == 'all') or (not done and self.current_index <= self.windows[1]):
             obs = self.obs_prep(False)
-            if self.current_index % 100 == 0:
+            if self.current_index % 200 == 0:
                 print(f"Current index: {self.current_index}, Reward: {reward}, Action: {action}")
         else:
             obs = np.zeros(self.obs_space, dtype=np.float32)
@@ -121,7 +125,7 @@ class RecurrentPPOAgent:
 
     def _initialize(self) -> None:
         if self.file_path is None:
-            self.model = RecurrentPPO("MlpLstmPolicy", self.env, tensorboard_log="./tensorboard/", verbose=0)
+            self.model = RecurrentPPO("MlpLstmPolicy", self.env, verbose=0)
         else:
             self.model = RecurrentPPO.load(self.file_path)
 
@@ -174,11 +178,11 @@ def test_trained_agent(agent, env, n_episodes=1):
             predicted_timings.append(info[0].get("predicted_timing"))
             total_reward += reward[0]
             # print(f"Episode: {episode+1}, Action: {action}, Reward: {reward[0]:.4f}, Predicted Timing: {info[0].get('predicted_timing'):.4f}, Note: {info[0].get('note')}")
-    
+
+
         episodes_timings.append(predicted_timings)
     print(f"Total reward: {total_reward}")
     return episodes_timings
-
 
 
 # ----------------------------
@@ -192,24 +196,38 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     date = "0308"
-    model_number = "01"
-    window_size = 7
+    model_number = "03"
+    window_size = 10
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
 
 
-    env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], "rppoconfig.json", "2row_with_next")])
-    agent = RecurrentPPOAgent(env)
+
     
     # Uncomment these lines to train/save the model if needed.
     if args.traintest == '1':
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_next")])
+        agent = RecurrentPPOAgent(env)
         agent.learn(total_timesteps=200000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
     elif args.traintest == '2':
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_next")])
+        agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
         predicted_timings = episodes_timings[0]
 
         write_midi_from_timings(predicted_timings, data[0, :], window_size, output_midi_file="../assets/adjusted_output.mid", default_duration=0.3)
+    elif args.traintest == '3':
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], [277, 330], "rppoconfig.json", "2row_with_next")])
+        agent = RecurrentPPOAgent(env)
+        agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
+        episodes_timings = test_trained_agent(agent, env, n_episodes=1)
+        predicted_timings = episodes_timings[0]
+
+
+
+        
+
 
 

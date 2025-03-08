@@ -52,7 +52,6 @@ def write_midi_from_timings(timings, notes, window_size, output_midi_file="outpu
     piano_program = pretty_midi.instrument_name_to_program('Acoustic Grand Piano')
     piano = pretty_midi.Instrument(program=piano_program)
     
-    print(len(note_onsets), len(notes))
     for onset, note in zip(note_onsets, notes[window_size - 1:]):
 
         start_time = onset
