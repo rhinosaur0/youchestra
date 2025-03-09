@@ -70,6 +70,15 @@ class MusicAccompanistEnv(gym.Env):
                 extra_column = np.vstack([np.zeros_like(extra_next_timing), extra_next_timing])  # shape: (2, 1)
                 observation = np.concatenate([next_window, extra_column], axis=1)  # shape: (2, window_size)
                 return observation
+            case "2row_with_ratio":
+                first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+                second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
+                next_window = second_note - first_note
+                next_window[0] = next_window[0] / next_window[1]
+                extra_next_timing = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32)
+                extra_column = np.vstack([np.zeros_like(extra_next_timing), extra_next_timing])  # shape: (2, 1)
+                observation = np.concatenate([next_window, extra_column], axis=1)  # shape: (2, window_size)
+                return observation
 
 
     def step(self, action):
@@ -87,9 +96,12 @@ class MusicAccompanistEnv(gym.Env):
         reward = self.reward_function(predicted_timing, solo_timing)
         
         self.current_index += 1
-        done = (self.current_index >= self.n_notes)
+        if self.windows == 'all':
+            done = (self.current_index >= self.n_notes)
+        else:
+            done = (self.current_index > self.windows[1])
         
-        if (not done and self.windows == 'all') or (not done and self.current_index <= self.windows[1]):
+        if not done:
             obs = self.obs_prep(False)
             if self.current_index % 200 == 0:
                 print(f"Current index: {self.current_index}, Reward: {reward}, Action: {action}")
@@ -176,6 +188,7 @@ def test_trained_agent(agent, env, n_episodes=1):
             action = agent.predict(obs)
             obs, reward, done, info = env.step(action)
             predicted_timings.append(info[0].get("predicted_timing"))
+            print(f"Prediction: {info[0].get('predicted_timing')}, Reward: {reward}, \nObs: {obs}")  
             total_reward += reward[0]
             # print(f"Episode: {episode+1}, Action: {action}, Reward: {reward[0]:.4f}, Predicted Timing: {info[0].get('predicted_timing'):.4f}, Note: {info[0].get('note')}")
 
@@ -196,8 +209,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     date = "0308"
-    model_number = "03"
-    window_size = 10
+    model_number = "11"
+    window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
 
@@ -206,12 +219,12 @@ if __name__ == "__main__":
     
     # Uncomment these lines to train/save the model if needed.
     if args.traintest == '1':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_next")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_ratio")])
         agent = RecurrentPPOAgent(env)
         agent.learn(total_timesteps=200000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
     elif args.traintest == '2':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_next")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_ratio")])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
@@ -219,7 +232,7 @@ if __name__ == "__main__":
 
         write_midi_from_timings(predicted_timings, data[0, :], window_size, output_midi_file="../assets/adjusted_output.mid", default_duration=0.3)
     elif args.traintest == '3':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], [277, 330], "rppoconfig.json", "2row_with_next")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], [277, 330], "rppoconfig.json", "2row_with_ratio")])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
