@@ -18,7 +18,7 @@ from data_processing import prepare_tensor
 from utils.midi_utils import write_midi_from_timings
 from utils.files import save_model
 from utils.lstm_augmented import create_augmented_sequence_with_flags
-from rl.policy_network import CustomActorCriticPolicy, CustomFeatureExtractor
+from rl.policy_network import CustomFeatureExtractor
 
 
 
@@ -41,18 +41,21 @@ class MusicAccompanistEnv(gymnasium.Env):
         
         # Create a Dict observation space with separate components for historical data and future reference
         # This better aligns with how TempoPredictor processes the data
-        if option in ["2row_with_next", "2row_with_ratio"]:
+        if option in ["difference", "2row_with_ratio"]:
             # For options that use a 2D array for historical data plus a future reference
             # The historical window size is window_size-1 since we use the last position for future ref
             hist_shape = (2, self.window_size - 1)
             # The observation space is flattened when passed to the model
             flat_dim = 2 * (self.window_size - 1) + 1  # +1 for future ref
-            self.observation_space = spaces.Box(low=-10.0, high=10.0, shape=(flat_dim,), dtype=np.float32)
+            self.observation_space = spaces.Box(low=0, high=10.0, shape=(flat_dim,), dtype=np.float32)
+        elif option == "raw":
+            flat_dim = 2 * self.window_size + 1
+            self.observation_space = spaces.Box(low=0, high=30.0, shape=(flat_dim,), dtype=np.float32)
         else:
             # Default for other options
             hist_shape = (2, self.window_size)
             flat_dim = 2 * self.window_size 
-            self.observation_space = spaces.Box(low=-10.0, high=10.0, shape=(flat_dim,), dtype=np.float32)
+            self.observation_space = spaces.Box(low=0, high=10.0, shape=(flat_dim,), dtype=np.float32)
         
         self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
         self.forecast_window = 3
@@ -62,13 +65,17 @@ class MusicAccompanistEnv(gymnasium.Env):
             self.current_index = self.window_size
         
         match self.option:
-            case "2row":
+            case "raw":
                 next_window = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
                 next_window = next_window - next_window[:, 0:1]
+
+                future_ref = np.array([self.data[1, self.current_index]], dtype=np.float32)
+                next_window = np.concatenate([next_window.flatten(), future_ref], axis=0)
                 # Flatten for model compatibility
-                return next_window.flatten()
+                return next_window
                 
-            case "2row_with_next":
+
+            case "difference":
                 # Historical data: differences between consecutive time steps
                 first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
                 second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
@@ -261,12 +268,10 @@ if __name__ == "__main__":
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
 
-
-
     
     # Uncomment these lines to train/save the model if needed.
     if args.traintest == '1':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_next")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "raw")])
         agent = RecurrentPPOAgent(env)
         agent.learn(total_timesteps=200000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
