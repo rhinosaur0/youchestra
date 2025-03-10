@@ -2,7 +2,7 @@
     "window_size": 7,
     "option": {
       "2row": {
-        "observation_space": [2, 7]
+        "observation_space": [7, 2]
       },
       "1row+next": {
         "observation_space": [21]
@@ -11,10 +11,13 @@
         "observation_space": [2, 9]
       },
       "2row_with_ratio": {
-        "observation_space": [2, 7]
+        "observation_space": [7, 2]
       },
       "2row_with_next": {
-        "observation_space": [2, 7]
+        "observation_space": [7, 2]
+      },
+      "forecast": {
+        "observation_space": [6, 10]
       },
       "2row_with_notes": {
         "observation_space": [3, 7]

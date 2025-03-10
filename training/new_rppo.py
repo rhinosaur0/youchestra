@@ -1,25 +1,30 @@
+# New RPPO with two LSTM layers 
+
+
 import gymnasium
 from gymnasium import spaces
+from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.policies import ActorCriticPolicy
+import torch
+import torch.nn as nn
 import numpy as np
 from typing import Optional
 import json
-from math import log
 import argparse
+from typing import Callable
 
 from data_processing import prepare_tensor
 from utils.midi_utils import write_midi_from_timings
 from utils.files import save_model
 from utils.lstm_augmented import create_augmented_sequence_with_flags
+from rl.policy_network import CustomActorCriticPolicy, CustomFeatureExtractor
 
 
 
 class MusicAccompanistEnv(gymnasium.Env):
     """
-    
-    Observations: A sliding window (3 x window_size) from the input data.
-       - Row 0: Reference pitch
-       - Row 1: Soloist pitch timing
-       - Row 2: Reference pitch's metronomic timing
+    Observations: A sliding window of historical data plus a future reference timing.
     """
     def __init__(self, data, windows, config_file, option):
         super(MusicAccompanistEnv, self).__init__()
@@ -30,50 +35,72 @@ class MusicAccompanistEnv(gymnasium.Env):
         with open(config_file, 'r') as f:
             self.config = json.load(f)
 
-        self.obs_space = self.config['option'][option]['observation_space']
         self.window_size = self.config['window_size']
         self.windows = windows
         self.current_index = self.window_size
-        self.observation_space = spaces.Box(low = 0.0, high = 10.0, shape = self.obs_space, dtype = np.float32)
+        
+        # Create a Dict observation space with separate components for historical data and future reference
+        # This better aligns with how TempoPredictor processes the data
+        if option in ["2row_with_next", "2row_with_ratio"]:
+            # For options that use a 2D array for historical data plus a future reference
+            # The historical window size is window_size-1 since we use the last position for future ref
+            hist_shape = (2, self.window_size - 1)
+            # The observation space is flattened when passed to the model
+            flat_dim = 2 * (self.window_size - 1) + 1  # +1 for future ref
+            self.observation_space = spaces.Box(low=-10.0, high=10.0, shape=(flat_dim,), dtype=np.float32)
+        else:
+            # Default for other options
+            hist_shape = (2, self.window_size)
+            flat_dim = 2 * self.window_size 
+            self.observation_space = spaces.Box(low=-10.0, high=10.0, shape=(flat_dim,), dtype=np.float32)
+        
         self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
         self.forecast_window = 3
     
     def obs_prep(self, reset):
         if reset:
             self.current_index = self.window_size
+        
         match self.option:
             case "2row":
                 next_window = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
                 next_window = next_window - next_window[:, 0:1]
-                return next_window
+                # Flatten for model compatibility
+                return next_window.flatten()
+                
+            case "2row_with_next":
+                # Historical data: differences between consecutive time steps
+                first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+                second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
+                historical_data = second_note - first_note
+                
+                # Future reference: next reference timing difference
+                future_ref = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32)
+                
+                # Flatten historical data and append future ref
+                return np.concatenate([historical_data.flatten(), future_ref])
+                
+            case "2row_with_ratio":
+                # Historical data: differences between consecutive time steps
+                first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+                second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
+                historical_data = second_note - first_note
+                # Calculate ratios for row 0
+                historical_data[0] = historical_data[0] / (historical_data[1] + 1e-8)
+                
+                # Future reference: next reference timing difference
+                future_ref = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32)
+                
+                # Flatten historical data and append future ref
+                return np.concatenate([historical_data.flatten(), future_ref])
+                
             case "1row+next":
                 next_window = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
-                next_window = next_window - next_window[:, 0:1] # normalize by setting the first time to 0
-                next_pred_note = self.data[1, self.current_index]
-                return np.concatenate([next_window.flatten(), [next_pred_note]])
-            case "2row_normalized":
-                first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
-                second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
-                next_window = second_note - first_note
-                return next_window
-            case "2row_with_next":
-                first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
-                second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
-                next_window = second_note - first_note
-                extra_next_timing = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32)
-                extra_column = np.vstack([np.zeros_like(extra_next_timing), extra_next_timing])  # shape: (2, 1)
-                observation = np.concatenate([next_window, extra_column], axis=1)  # shape: (2, window_size)
-                return observation
-            case "2row_with_ratio":
-                first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
-                second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
-                next_window = second_note - first_note
-                next_window[0] = next_window[0] / next_window[1]
-
-                extra_next_timing = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32)
-                extra_column = np.vstack([np.zeros_like(extra_next_timing), extra_next_timing])  # shape: (2, 1)
-                observation = np.concatenate([next_window, extra_column], axis=1)  # shape: (2, window_size)
-                return observation
+                next_window = next_window - next_window[:, 0:1] 
+                # Next prediction note is the future reference
+                future_ref = np.array([self.data[1, self.current_index]], dtype=np.float32)
+                return np.concatenate([next_window.flatten(), future_ref])
+                
             case "forecast":
                 first_note_real = self.data[0:1, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
                 second_note_real = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
@@ -83,16 +110,17 @@ class MusicAccompanistEnv(gymnasium.Env):
                 second_note_ref = self.data[1:2, self.current_index - self.window_size + 1:self.current_index + self.forecast_window].astype(np.float32)
                 next_window_ref = second_note_ref - first_note_ref
 
-                obs = create_augmented_sequence_with_flags(next_window_real[0], next_window_ref[0], self.forecast_window).T
-                return obs 
-            
-    def reset(self, seed=None, **kwargs):
+                obs = create_augmented_sequence_with_flags(next_window_real[0], next_window_ref[0], self.forecast_window).flatten()
+                return obs
+    
+    def reset(self, seed=None, options=None):
+        # Update to match current gymnasium API
         if self.windows == 'all':
-            obs = self.obs_prep(True).T
+            obs = self.obs_prep(True)
         else:
             self.current_index = self.windows[0]
-            obs = self.obs_prep(False).T
-        return obs, {}
+            obs = self.obs_prep(False)
+        return obs, {}  # Return empty info dict for gymnasium compatibility
 
     def step(self, action):
         """
@@ -118,20 +146,16 @@ class MusicAccompanistEnv(gymnasium.Env):
             done = (self.current_index > self.windows[1] - self.forecast_window)
         
         if not done:
-            obs = self.obs_prep(False).T
+            obs = self.obs_prep(False)
             if self.current_index % 200 == 0:
                 print(f"Current index: {self.current_index}, Reward: {reward}, Action: {action}")
         else:
-            obs = np.zeros(self.obs_space, dtype=np.float32)
+            obs = np.zeros(self.observation_space.shape, dtype=np.float32)
+            
         info = {"predicted_timing": predicted_timing}
+        # Update to match current gymnasium API
         return obs, reward, done, False, info
 
-    def reward_function(self, predicted_timing, solo_timing):
-        epsilon = 1e-8
-        ratio_diff = 5 * log((predicted_timing + epsilon) / (solo_timing + epsilon)) ** 2
-        reward = -ratio_diff
-        return reward
-    
     def new_reward_function(self, solo_timing, ref_timing, action):
         epsilon = 1e-8
         ideal_log_action = np.log((solo_timing + epsilon) / (ref_timing + epsilon))
@@ -143,12 +167,6 @@ class MusicAccompanistEnv(gymnasium.Env):
         reward = -error
         return reward
 
-    def render(self, mode='human'):
-        pass
-
-
-from sb3_contrib import RecurrentPPO
-from stable_baselines3.common.vec_env import DummyVecEnv
 
 class RecurrentPPOAgent:
     def __init__(self, env, file_path: Optional[str] = None):
@@ -163,10 +181,14 @@ class RecurrentPPOAgent:
 
 
     def _initialize(self) -> None:
+        policy_kwargs = dict(
+            features_extractor_class=CustomFeatureExtractor,
+            features_extractor_kwargs=dict(hidden_dim=64, n=2)
+        )
         if self.file_path is None:
-            self.model = RecurrentPPO("MlpLstmPolicy", self.env, verbose=0)
+            self.model = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=1)
         else:
-            self.model = RecurrentPPO.load(self.file_path)
+            self.model = PPO.load(self.file_path)
 
     def reset(self) -> None:
         """Reset the agent's LSTM states and episode_start flag."""
@@ -205,7 +227,7 @@ def test_trained_agent(agent, env, n_episodes=1):
     """
     episodes_timings = []
     for episode in range(n_episodes):
-        obs = env.reset()  # Reset environment
+        obs, _ = env.reset()  # Reset environment
         agent.reset()      # Reset agent's LSTM states
         done = False
         total_reward = 0.0
@@ -213,12 +235,10 @@ def test_trained_agent(agent, env, n_episodes=1):
         
         while not done:
             action = agent.predict(obs)
-            obs, reward, done, info = env.step(action)
-            predicted_timings.append(info[0].get("predicted_timing"))
-            print(f"Prediction: {info[0].get('predicted_timing')}, Reward: {reward}, \nObs: {obs}")  
-            total_reward += reward[0]
-            # print(f"Episode: {episode+1}, Action: {action}, Reward: {reward[0]:.4f}, Predicted Timing: {info[0].get('predicted_timing'):.4f}, Note: {info[0].get('note')}")
-
+            obs, reward, done, truncated, info = env.step(action)
+            predicted_timings.append(info["predicted_timing"])
+            print(f"Prediction: {info['predicted_timing']}, Reward: {reward}")  
+            total_reward += reward
 
         episodes_timings.append(predicted_timings)
     print(f"Total reward: {total_reward}")
@@ -236,7 +256,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     date = "0309"
-    model_number = "05"
+    model_number = "06"
     window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
@@ -246,12 +266,12 @@ if __name__ == "__main__":
     
     # Uncomment these lines to train/save the model if needed.
     if args.traintest == '1':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "forecast")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_next")])
         agent = RecurrentPPOAgent(env)
         agent.learn(total_timesteps=200000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
     elif args.traintest == '2':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_next")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_ratio")])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
@@ -264,10 +284,6 @@ if __name__ == "__main__":
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
         predicted_timings = episodes_timings[0]
-
-
-
-        
 
 
 
