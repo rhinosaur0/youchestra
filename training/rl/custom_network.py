@@ -10,6 +10,8 @@ from stable_baselines3.common.torch_layers import (
     FlattenExtractor,
 )
 from stable_baselines3.common.utils import zip_strict
+from stable_baselines3.common.torch_layers import MlpExtractor
+from stable_baselines3.common.policies import ActorCriticPolicy
 
 from torch import nn
 import torch as th
@@ -45,7 +47,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
     ):
         self.window_size = window_size
         self.lstm_output_dim = lstm_hidden_size
-        print(lstm_hidden_size)
+
         super().__init__(
             observation_space,
             action_space,
@@ -64,6 +66,11 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
             normalize_images,
             optimizer_class,
             optimizer_kwargs,
+            lstm_hidden_size,
+            n_lstm_layers,
+            shared_lstm,
+            enable_critic_lstm,
+            lstm_kwargs,
         )
 
         self.lstm_kwargs = lstm_kwargs or {}
@@ -104,30 +111,20 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
                 **self.lstm_kwargs,
             )
 
-        # Setup optimizer with initial learning rate
-        self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
-
-        ### NEW
-
-        # self.concat_future_lstm = nn.Sequential(
-        #     nn.Linear(lstm_hidden_size + some_dim, 64),
-        #     nn.ReLU(),
-        #     nn.Linear(64, 1)
-        # )
         self.post_concat_layer = nn.Sequential(
             nn.Linear(lstm_hidden_size + 1, lstm_hidden_size),
             nn.ReLU()
         )
+        # Setup optimizer with initial learning rate
+        self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
+
 
     def obs_split(self, obs):
-        historical = obs[:, :2*self.window_size].reshape(obs.shape[0], self.window_size, 2)
-        future_feature = obs[:, -1:]
-        return historical, future_feature
+        return obs[:, :-1], obs[:, -1]
 
     # @staticmethod
     def _process_sequence(self, 
         features: th.Tensor,
-        future_feature: th.Tensor, # The extra note at the end of the sequence for reference
         lstm_states: tuple[th.Tensor, th.Tensor],
         episode_starts: th.Tensor,
         lstm: nn.LSTM,
@@ -149,7 +146,9 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         # Batch to sequence
         # (padded batch size, features_dim) -> (n_seq, max length, features_dim) -> (max length, n_seq, features_dim)
         # note: max length (max sequence length) is always 1 during data collection
-        features_sequence = features.reshape((n_seq, -1, 14)).swapaxes(0, 1)
+
+
+        features_sequence = features.reshape((n_seq, -1, self.window_size * 2 + 1)).swapaxes(0, 1)
         episode_starts = episode_starts.reshape((n_seq, -1)).swapaxes(0, 1)
 
         # print(f'features_sequence: {features_sequence.shape}, episode_starts: {episode_starts.shape}')
@@ -163,15 +162,12 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         #     return lstm_output, lstm_states
 
         lstm_output = []
-
         for features, episode_start in zip_strict(features_sequence, episode_starts):
-            # print(f'lstm_states: {lstm_states[0].shape}, {lstm_states[1].shape}')
             batch_size = features.shape[0]
+            features, future_feature = self.obs_split(features)
             features = features.reshape(2, batch_size, 7).permute(2, 1, 0)
 
-
-            # print(f'features: {features.shape}, episode_start: {episode_start.shape}')
-
+            # print(f'features: {features.shape}, future_feature: {future_feature.shape}')
 
             hidden, lstm_states = lstm(
                 features,
@@ -182,117 +178,16 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
                 ),
             )
 
-            # print(f'hidden: {hidden.shape}, lstm_states: {lstm_states[0].shape}, {lstm_states[1].shape}')
-            
             hidden_last = hidden[-1]  # shape: [batch_size, 256]
-            combined = th.cat([hidden_last, future_feature], dim=1)  
+            combined = th.cat([hidden_last, future_feature.unsqueeze(1)], dim=1)  
             final_hidden = self.post_concat_layer(combined)  
             
             lstm_output += [final_hidden.unsqueeze(0)]
         
-        # Sequence to batch
-        # (sequence length, n_seq, lstm_out_dim) -> (batch_size, lstm_out_dim)
         lstm_output = th.flatten(th.cat(lstm_output).transpose(0, 1), start_dim=0, end_dim=1)
-        # print(f'lstm_output: {lstm_output.shape}')
 
         return lstm_output, lstm_states
-
-    def forward(
-            self, 
-            obs: th.Tensor,
-            lstm_states: RNNStates,
-            episode_starts: th.Tensor,
-            deterministic: bool = False,
-    ) -> tuple[th.Tensor, th.Tensor, th.Tensor, RNNStates]:
-        # New forward method
-
-        # split from (2 * n + 1) to (n, 2) and (1,)
-        historical, future_feature = self.obs_split(obs)
-        
-        
-        if self.share_features_extractor:
-            pi_features = vf_features = historical  # alis
-        else:
-            raise NotImplementedError
-        
-
-        latent_pi, lstm_states_pi = self._process_sequence(pi_features, future_feature, lstm_states.pi, episode_starts, self.lstm_actor)
-        if self.lstm_critic is not None:
-            latent_vf, lstm_states_vf = self._process_sequence(vf_features, future_feature, lstm_states.vf, episode_starts, self.lstm_critic)
-        elif self.shared_lstm:
-            # Re-use LSTM features but do not backpropagate
-            latent_vf = latent_pi.detach()
-            lstm_states_vf = (lstm_states_pi[0].detach(), lstm_states_pi[1].detach())
-        else:
-            # Critic only has a feedforward network
-            latent_vf = self.critic(vf_features)
-            lstm_states_vf = lstm_states_pi
-
-
-        print(latent_pi.shape, future_feature.shape)
-        latent_pi = self.mlp_extractor.forward_actor(latent_pi)
-        latent_vf = self.mlp_extractor.forward_critic(latent_vf)
-
-        # Evaluate the values for the given observations
-        values = self.value_net(latent_vf)
-        distribution = self._get_action_dist_from_latent(latent_pi)
-        actions = distribution.get_actions(deterministic=deterministic)
-        log_prob = distribution.log_prob(actions)
-        return actions, values, log_prob, RNNStates(lstm_states_pi, lstm_states_vf)
     
-    # TODO
-
-    def get_distribution(self, observation, lstm_states, episode_starts):
-        historical, future_feature = self.obs_split(observation)
-
-        features = super(RecurrentActorCriticPolicy, self).extract_features(historical, self.pi_features_extractor)
-        latent_pi, lstm_states = self._process_sequence(features, future_feature, lstm_states, episode_starts, self.lstm_actor)
-        # print(latent_pi.shape, future_feature.shape)
-        latent_pi = self.mlp_extractor.forward_actor(latent_pi)
-        return self._get_action_dist_from_latent(latent_pi), lstm_states
-
-    def predict_values(self, observation, lstm_states, episode_starts):
-        features, future_feature = self.obs_split(observation)
-        
-        if self.lstm_critic is not None:
-            latent_vf, lstm_states_vf = self._process_sequence(features, future_feature, lstm_states, episode_starts, self.lstm_critic)
-        elif self.shared_lstm:
-            # Use LSTM from the actor
-            latent_pi, _ = self._process_sequence(features, future_feature, lstm_states, episode_starts, self.lstm_actor)
-            latent_vf = latent_pi.detach()
-        else:
-            latent_vf = self.critic(features)
-
-        latent_vf = self.mlp_extractor.forward_critic(latent_vf)
-        return self.value_net(latent_vf)
-
-    def evaluate_actions(self, observation, actions, lstm_states, episode_starts):
-        features, future_feature = self.obs_split(observation)
-
-        if self.share_features_extractor:
-            pi_features = vf_features = features  # alias
-        else:
-            pi_features, vf_features = features
-        latent_pi, _ = self._process_sequence(pi_features, future_feature, lstm_states.pi, episode_starts, self.lstm_actor)
-        if self.lstm_critic is not None:
-            latent_vf, _ = self._process_sequence(vf_features, future_feature, lstm_states.vf, episode_starts, self.lstm_critic)
-        elif self.shared_lstm:
-            latent_vf = latent_pi.detach()
-        else:
-            latent_vf = self.critic(vf_features)
-
-        latent_pi = self.mlp_extractor.forward_actor(latent_pi)
-        latent_vf = self.mlp_extractor.forward_critic(latent_vf)
-
-        distribution = self._get_action_dist_from_latent(latent_pi)
-        log_prob = distribution.log_prob(actions)
-        values = self.value_net(latent_vf)
-        return values, log_prob, distribution.entropy()
-
-    def predict(self, observation, state, episode_starts, deterministic):
-        raise NotImplementedError
-
-
 
 class CustomRPPO(RecurrentPPO):
     policy_aliases = {
