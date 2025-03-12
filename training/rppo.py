@@ -10,6 +10,7 @@ from data_processing import prepare_tensor
 from utils.midi_utils import write_midi_from_timings
 from utils.files import save_model
 from utils.lstm_augmented import create_augmented_sequence_with_flags
+from rl.custom_network import CustomRPPO
 
 
 
@@ -147,8 +148,8 @@ class MusicAccompanistEnv(gymnasium.Env):
         pass
 
 
-from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.vec_env import DummyVecEnv
+from sb3_contrib import RecurrentPPO
 
 class RecurrentPPOAgent:
     def __init__(self, env, file_path: Optional[str] = None):
@@ -197,6 +198,9 @@ class RecurrentPPOAgent:
         self.model.verbose = verbose
         self.model.learn(total_timesteps=total_timesteps, log_interval=log_interval)
 
+    def get_policy(self):
+        return self.model.policy
+
 
 def test_trained_agent(agent, env, n_episodes=1):
     """
@@ -215,7 +219,7 @@ def test_trained_agent(agent, env, n_episodes=1):
             action = agent.predict(obs)
             obs, reward, done, info = env.step(action)
             predicted_timings.append(info[0].get("predicted_timing"))
-            print(f"Prediction: {info[0].get('predicted_timing')}, Reward: {reward}, \nObs: {obs}")  
+            print(f"Prediction: {info[0].get('predicted_timing')}, Reward: {reward}, Action: {action}")  
             total_reward += reward[0]
             # print(f"Episode: {episode+1}, Action: {action}, Reward: {reward[0]:.4f}, Predicted Timing: {info[0].get('predicted_timing'):.4f}, Note: {info[0].get('note')}")
 
@@ -235,8 +239,8 @@ if __name__ == "__main__":
     parser.add_argument('--output_midi_file', '-o', type=str, help='output midi file', default = "../assets/adjusted_output.mid")
     args = parser.parse_args()
 
-    date = "0309"
-    model_number = "05"
+    date = "0310"
+    model_number = "04"
     window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
@@ -251,7 +255,7 @@ if __name__ == "__main__":
         agent.learn(total_timesteps=200000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
     elif args.traintest == '2':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_next")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_ratio")])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
@@ -265,6 +269,12 @@ if __name__ == "__main__":
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
         predicted_timings = episodes_timings[0]
 
+    elif args.traintest == '4':
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], [277, 330], "rppoconfig.json", "2row_with_ratio")])
+        agent = RecurrentPPOAgent(env)
+        agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
+
+        print(agent.get_policy())
 
 
         

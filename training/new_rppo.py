@@ -5,20 +5,18 @@ import gymnasium
 from gymnasium import spaces
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.policies import ActorCriticPolicy
-import torch
-import torch.nn as nn
+from sb3_contrib import RecurrentPPO
 import numpy as np
 from typing import Optional
 import json
 import argparse
-from typing import Callable
 
 from data_processing import prepare_tensor
 from utils.midi_utils import write_midi_from_timings
 from utils.files import save_model
 from utils.lstm_augmented import create_augmented_sequence_with_flags
 from rl.policy_network import CustomFeatureExtractor
+from rl.custom_network import CustomRPPO
 
 
 
@@ -188,14 +186,14 @@ class RecurrentPPOAgent:
 
 
     def _initialize(self) -> None:
-        policy_kwargs = dict(
-            features_extractor_class=CustomFeatureExtractor,
-            features_extractor_kwargs=dict(hidden_dim=64, n=2)
-        )
+        # policy_kwargs = dict(
+        #     features_extractor_class=CustomFeatureExtractor,
+        #     features_extractor_kwargs=dict(hidden_dim=64, n=2)
+        # )
         if self.file_path is None:
-            self.model = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=1)
+            self.model = CustomRPPO("Custom", env, verbose=1)
         else:
-            self.model = PPO.load(self.file_path)
+            self.model = CustomRPPO.load(self.file_path)
 
     def reset(self) -> None:
         """Reset the agent's LSTM states and episode_start flag."""
@@ -225,6 +223,8 @@ class RecurrentPPOAgent:
         """
         self.model.verbose = verbose
         self.model.learn(total_timesteps=total_timesteps, log_interval=log_interval)
+    def get_policy(self):
+        return self.model.policy
 
 
 def test_trained_agent(agent, env, n_episodes=1):
@@ -234,7 +234,8 @@ def test_trained_agent(agent, env, n_episodes=1):
     """
     episodes_timings = []
     for episode in range(n_episodes):
-        obs, _ = env.reset()  # Reset environment
+        obs = env.reset()  # Reset environment
+        print(obs)
         agent.reset()      # Reset agent's LSTM states
         done = False
         total_reward = 0.0
@@ -242,9 +243,9 @@ def test_trained_agent(agent, env, n_episodes=1):
         
         while not done:
             action = agent.predict(obs)
-            obs, reward, done, truncated, info = env.step(action)
-            predicted_timings.append(info["predicted_timing"])
-            print(f"Prediction: {info['predicted_timing']}, Reward: {reward}")  
+            obs, reward, done, info = env.step(action)
+            predicted_timings.append(info[0]["predicted_timing"])
+            # print(f"Prediction: {info[0]['predicted_timing']}, Reward: {reward}, Action: {action}")  
             total_reward += reward
 
         episodes_timings.append(predicted_timings)
@@ -262,8 +263,8 @@ if __name__ == "__main__":
     parser.add_argument('--output_midi_file', '-o', type=str, help='output midi file', default = "../assets/adjusted_output.mid")
     args = parser.parse_args()
 
-    date = "0309"
-    model_number = "06"
+    date = "0310"
+    model_number = "05"
     window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
@@ -276,7 +277,7 @@ if __name__ == "__main__":
         agent.learn(total_timesteps=200000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
     elif args.traintest == '2':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_ratio")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "difference")])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
@@ -289,6 +290,12 @@ if __name__ == "__main__":
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
         predicted_timings = episodes_timings[0]
+    elif args.traintest == '4':
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], [277, 330], "rppoconfig.json", "2row_with_ratio")])
+        agent = RecurrentPPOAgent(env)
+        agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
+
+        print(agent.get_policy())
 
 
 
