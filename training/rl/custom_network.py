@@ -3,15 +3,13 @@ from typing import Optional, Union, Any
 from sb3_contrib import RecurrentPPO
 from sb3_contrib.common.recurrent.policies import RecurrentActorCriticPolicy
 from sb3_contrib.ppo_recurrent.policies import CnnLstmPolicy, MlpLstmPolicy, MultiInputLstmPolicy
-from sb3_contrib.common.recurrent.type_aliases import RNNStates
 from stable_baselines3.common.type_aliases import Schedule
 from stable_baselines3.common.torch_layers import (
     BaseFeaturesExtractor,
     FlattenExtractor,
 )
 from stable_baselines3.common.utils import zip_strict
-from stable_baselines3.common.torch_layers import MlpExtractor
-from stable_baselines3.common.policies import ActorCriticPolicy
+
 
 from torch import nn
 import torch as th
@@ -43,9 +41,9 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         shared_lstm: bool = False,
         enable_critic_lstm: bool = True,
         lstm_kwargs: Optional[dict[str, Any]] = None,
-        window_size: int = 7,
+        lstm_time_steps: int = 7,
     ):
-        self.window_size = window_size
+        self.lstm_time_steps = lstm_time_steps
         self.lstm_output_dim = lstm_hidden_size
 
         super().__init__(
@@ -148,7 +146,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         # note: max length (max sequence length) is always 1 during data collection
 
 
-        features_sequence = features.reshape((n_seq, -1, self.window_size * 2 + 1)).swapaxes(0, 1)
+        features_sequence = features.reshape((n_seq, -1, self.lstm_time_steps * 2 + 1)).swapaxes(0, 1)
         episode_starts = episode_starts.reshape((n_seq, -1)).swapaxes(0, 1)
 
         # print(f'features_sequence: {features_sequence.shape}, episode_starts: {episode_starts.shape}')
@@ -162,12 +160,11 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         #     return lstm_output, lstm_states
 
         lstm_output = []
+
         for features, episode_start in zip_strict(features_sequence, episode_starts):
             batch_size = features.shape[0]
             features, future_feature = self.obs_split(features)
-            features = features.reshape(2, batch_size, 7).permute(2, 1, 0)
-
-            # print(f'features: {features.shape}, future_feature: {future_feature.shape}')
+            features = features.reshape(2, batch_size, self.lstm_time_steps).permute(2, 1, 0)
 
             hidden, lstm_states = lstm(
                 features,
@@ -178,11 +175,11 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
                 ),
             )
 
-            hidden_last = hidden[-1]  # shape: [batch_size, 256]
-            combined = th.cat([hidden_last, future_feature.unsqueeze(1)], dim=1)  
-            final_hidden = self.post_concat_layer(combined)  
+            hidden_last = hidden[-1]  # shape: [batch_size, 64]
+            # combined = th.cat([hidden_last, future_feature.unsqueeze(1)], dim=1)  
+            # final_hidden = self.post_concat_layer(combined)  
             
-            lstm_output += [final_hidden.unsqueeze(0)]
+            lstm_output += [hidden_last.unsqueeze(0)]
         
         lstm_output = th.flatten(th.cat(lstm_output).transpose(0, 1), start_dim=0, end_dim=1)
 

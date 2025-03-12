@@ -15,7 +15,6 @@ from data_processing import prepare_tensor
 from utils.midi_utils import write_midi_from_timings
 from utils.files import save_model
 from utils.lstm_augmented import create_augmented_sequence_with_flags
-from rl.policy_network import CustomFeatureExtractor
 from rl.custom_network import CustomRPPO
 
 
@@ -186,12 +185,8 @@ class RecurrentPPOAgent:
 
 
     def _initialize(self) -> None:
-        # policy_kwargs = dict(
-        #     features_extractor_class=CustomFeatureExtractor,
-        #     features_extractor_kwargs=dict(hidden_dim=64, n=2)
-        # )
         if self.file_path is None:
-            self.model = CustomRPPO("Custom", env, verbose=1)
+            self.model = CustomRPPO("Custom", env, verbose=1, policy_kwargs={"lstm_time_steps": 7})
         else:
             self.model = CustomRPPO.load(self.file_path)
 
@@ -263,8 +258,8 @@ if __name__ == "__main__":
     parser.add_argument('--output_midi_file', '-o', type=str, help='output midi file', default = "../assets/adjusted_output.mid")
     args = parser.parse_args()
 
-    date = "0310"
-    model_number = "05"
+    date = "0311"
+    model_number = "01"
     window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
@@ -276,20 +271,22 @@ if __name__ == "__main__":
         agent = RecurrentPPOAgent(env)
         agent.learn(total_timesteps=200000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
+
     elif args.traintest == '2':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "difference")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "raw")])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
         predicted_timings = episodes_timings[0]
-
         write_midi_from_timings(predicted_timings, data[0, :], window_size, output_midi_file="../assets/adjusted_output.mid", default_duration=0.3)
+    
     elif args.traintest == '3':
         env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], [277, 330], "rppoconfig.json", "2row_with_ratio")])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
         predicted_timings = episodes_timings[0]
+    
     elif args.traintest == '4':
         env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], [277, 330], "rppoconfig.json", "2row_with_ratio")])
         agent = RecurrentPPOAgent(env)
