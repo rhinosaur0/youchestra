@@ -41,9 +41,9 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         shared_lstm: bool = False,
         enable_critic_lstm: bool = True,
         lstm_kwargs: Optional[dict[str, Any]] = None,
-        lstm_time_steps: int = 7,
+        lstm_features: int = 7,
     ):
-        self.lstm_time_steps = lstm_time_steps
+        self.lstm_features = lstm_features
         self.lstm_output_dim = lstm_hidden_size
 
         super().__init__(
@@ -76,7 +76,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         self.enable_critic_lstm = enable_critic_lstm
         # self.features_dim = 14
         self.lstm_actor = nn.LSTM(
-            12, # remove the future reference
+            2, # remove the future reference
             lstm_hidden_size,
             num_layers=n_lstm_layers,
             **self.lstm_kwargs,
@@ -103,7 +103,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         # Use a separate LSTM for the critic
         if self.enable_critic_lstm:
             self.lstm_critic = nn.LSTM(
-                12,
+                2,
                 lstm_hidden_size,
                 num_layers=n_lstm_layers,
                 **self.lstm_kwargs,
@@ -146,7 +146,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         # note: max length (max sequence length) is always 1 during data collection
 
 
-        features_sequence = features.reshape((n_seq, -1, self.lstm_time_steps * 2 + 1)).swapaxes(0, 1)
+        features_sequence = features.reshape((n_seq, -1, self.lstm_features + 1)).swapaxes(0, 1)
         episode_starts = episode_starts.reshape((n_seq, -1)).swapaxes(0, 1)
 
         # print(f'features_sequence: {features_sequence.shape}, episode_starts: {episode_starts.shape}')
@@ -164,10 +164,11 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         for features, episode_start in zip_strict(features_sequence, episode_starts):
             batch_size = features.shape[0]
             features, future_feature = self.obs_split(features)
-            # features = features.reshape(2, batch_size, self.lstm_time_steps).permute(2, 1, 0)
+            features = features.view(batch_size, 2, 6).permute(2, 0, 1)
+
 
             hidden, lstm_states = lstm(
-                features.unsqueeze(0),
+                features,
                 (
                     # Reset the states at the beginning of a new episode
                     (1.0 - episode_start).view(1, batch_size, 1) * lstm_states[0],

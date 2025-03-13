@@ -135,10 +135,14 @@ class MusicAccompanistEnv(gymnasium.Env):
         # Extract the current reference and soloist timing
         ref_timing = self.data[1, self.current_index] - self.data[1, self.current_index - 1]
         solo_timing = self.data[0, self.current_index] - self.data[0, self.current_index - 1]
-        predicted_log_speed = np.arctanh(action[0])
+        predicted_log_speed = action[0]
         speed_factor = np.exp(predicted_log_speed)
 
         predicted_timing = ref_timing * speed_factor
+
+        if predicted_timing == float('inf'):
+            print(f'predicted_log_speed: {predicted_log_speed}, speed_factor: {speed_factor}')
+            # raise ValueError("Predicted timing is infinite. Check for division by zero.")
 
         # reward = self.reward_function(predicted_timing, solo_timing, action[0])
         reward = self.new_reward_function(solo_timing, ref_timing, action[0])
@@ -165,9 +169,8 @@ class MusicAccompanistEnv(gymnasium.Env):
         ideal_log_action = np.log((solo_timing + epsilon) / (ref_timing + epsilon))
         
         scale = 1.0  # Tune this parameter as needed
-        ideal_action = np.tanh(ideal_log_action / scale)
 
-        error = np.abs(action - ideal_action)
+        error = scale * np.abs(action - ideal_log_action)
         reward = -error
         return reward
 
@@ -186,7 +189,7 @@ class RecurrentPPOAgent:
 
     def _initialize(self) -> None:
         if self.file_path is None:
-            self.model = CustomRPPO("Custom", env, verbose=1, policy_kwargs={"lstm_time_steps": 6})
+            self.model = CustomRPPO("Custom", env, verbose=1, policy_kwargs={"lstm_features": 2 * 6})
         else:
             self.model = CustomRPPO.load(self.file_path)
 
@@ -230,7 +233,6 @@ def test_trained_agent(agent, env, n_episodes=1):
     episodes_timings = []
     for episode in range(n_episodes):
         obs = env.reset()  # Reset environment
-        print(obs)
         agent.reset()      # Reset agent's LSTM states
         done = False
         total_reward = 0.0
@@ -259,7 +261,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     date = "0312"
-    model_number = "01"
+    model_number = "02"
     window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")

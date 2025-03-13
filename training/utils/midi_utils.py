@@ -25,16 +25,7 @@ def extract_midi_onsets_and_pitches(midi_file, include_notes = False, instrument
     """
     import numpy as np
     import pretty_midi
-    import mido
     pm = pretty_midi.PrettyMIDI(midi_file)
-    # midi_file = mido.MidiFile('../assets/reference_chopin.mid')
-    # for msg in midi_file:
-    #     if msg.type == 'note_on':
-    #         print(msg)
-
-    if midi_file == "../assets/reference_chopin.mid":
-        beats = pm.get_downbeats()
-    
     # Select an instrument (assumes that the desired soloist is in one track)
     instrument = pm.instruments[instrument_index]
     # Sort the notes by their start time
@@ -53,6 +44,8 @@ def write_midi_from_timings(timings, notes, window_size, output_midi_file="outpu
     # Compute cumulative onset times: first note starts at time 0.
     import pretty_midi
     note_onsets = [0]
+    for a, t in enumerate(timings):
+        note_onsets.append(note_onsets[-1] + t)
     
     # Create a PrettyMIDI object and a piano instrument.
     pm = pretty_midi.PrettyMIDI()
@@ -60,12 +53,12 @@ def write_midi_from_timings(timings, notes, window_size, output_midi_file="outpu
     piano = pretty_midi.Instrument(program=piano_program)
     
     for onset, note in zip(note_onsets, notes[window_size - 1:]):
-
         start_time = onset
         end_time = onset + default_duration  # fixed note duration
         note = pretty_midi.Note(velocity=100, pitch=int(note), start=start_time, end=end_time)
         piano.notes.append(note)
     
     pm.instruments.append(piano)
+
     pm.write(output_midi_file)
     print(f"MIDI file written to {output_midi_file}")
