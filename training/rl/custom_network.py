@@ -76,7 +76,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         self.enable_critic_lstm = enable_critic_lstm
         # self.features_dim = 14
         self.lstm_actor = nn.LSTM(
-            2, # remove the future reference
+            12, # remove the future reference
             lstm_hidden_size,
             num_layers=n_lstm_layers,
             **self.lstm_kwargs,
@@ -103,7 +103,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         # Use a separate LSTM for the critic
         if self.enable_critic_lstm:
             self.lstm_critic = nn.LSTM(
-                2,
+                12,
                 lstm_hidden_size,
                 num_layers=n_lstm_layers,
                 **self.lstm_kwargs,
@@ -164,17 +164,17 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         for features, episode_start in zip_strict(features_sequence, episode_starts):
             batch_size = features.shape[0]
             features, future_feature = self.obs_split(features)
-            features = features.reshape(2, batch_size, self.lstm_time_steps).permute(2, 1, 0)
+            # features = features.reshape(2, batch_size, self.lstm_time_steps).permute(2, 1, 0)
 
             hidden, lstm_states = lstm(
-                features,
+                features.unsqueeze(0),
                 (
                     # Reset the states at the beginning of a new episode
-                    (1.0 - episode_start).view(1, n_seq, 1) * lstm_states[0],
-                    (1.0 - episode_start).view(1, n_seq, 1) * lstm_states[1],
+                    (1.0 - episode_start).view(1, batch_size, 1) * lstm_states[0],
+                    (1.0 - episode_start).view(1, batch_size, 1) * lstm_states[1],
                 ),
             )
-
+            
             hidden_last = hidden[-1]  # shape: [batch_size, 64]
             # combined = th.cat([hidden_last, future_feature.unsqueeze(1)], dim=1)  
             # final_hidden = self.post_concat_layer(combined)  

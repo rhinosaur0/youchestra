@@ -10,7 +10,6 @@ from data_processing import prepare_tensor
 from utils.midi_utils import write_midi_from_timings
 from utils.files import save_model
 from utils.lstm_augmented import create_augmented_sequence_with_flags
-from rl.custom_network import CustomRPPO
 
 
 
@@ -75,6 +74,15 @@ class MusicAccompanistEnv(gymnasium.Env):
                 extra_column = np.vstack([np.zeros_like(extra_next_timing), extra_next_timing])  # shape: (2, 1)
                 observation = np.concatenate([next_window, extra_column], axis=1)  # shape: (2, window_size)
                 return observation
+            
+            case "measure":
+                first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+                second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
+                historical = second_note - first_note
+
+                extra_next_timing = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32)
+
+
             case "forecast":
                 first_note_real = self.data[0:1, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
                 second_note_real = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
@@ -239,8 +247,8 @@ if __name__ == "__main__":
     parser.add_argument('--output_midi_file', '-o', type=str, help='output midi file', default = "../assets/adjusted_output.mid")
     args = parser.parse_args()
 
-    date = "0310"
-    model_number = "04"
+    date = "0309"
+    model_number = "03"
     window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")

@@ -30,8 +30,6 @@ def prepare_tensor(live_midi, reference_midi, include_everything=False):
 if __name__ == "__main__":
     tensor = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid",)
     tensor = tensor.T
-    for a, i in enumerate(tensor):
-        if a < 290 or a > 330:
-            continue
-        print(a, i)
+
+    
 
