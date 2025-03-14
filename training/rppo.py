@@ -64,6 +64,7 @@ class MusicAccompanistEnv(gymnasium.Env):
                 extra_column = np.vstack([np.zeros_like(extra_next_timing), extra_next_timing])  # shape: (2, 1)
                 observation = np.concatenate([next_window, extra_column], axis=1)  # shape: (2, window_size)
                 return observation
+            
             case "2row_with_ratio":
                 first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
                 second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
@@ -112,7 +113,7 @@ class MusicAccompanistEnv(gymnasium.Env):
         # Extract the current reference and soloist timing
         ref_timing = self.data[1, self.current_index] - self.data[1, self.current_index - 1]
         solo_timing = self.data[0, self.current_index] - self.data[0, self.current_index - 1]
-        predicted_log_speed = np.arctanh(action[0])
+        predicted_log_speed = action[0]
         speed_factor = np.exp(predicted_log_speed)
 
         predicted_timing = ref_timing * speed_factor
@@ -146,9 +147,9 @@ class MusicAccompanistEnv(gymnasium.Env):
         ideal_log_action = np.log((solo_timing + epsilon) / (ref_timing + epsilon))
         
         scale = 1.0  # Tune this parameter as needed
-        ideal_action = np.tanh(ideal_log_action / scale)
 
-        error = np.abs(action - ideal_action)
+
+        error = np.abs(action - ideal_log_action)
         reward = -error
         return reward
 
@@ -253,15 +254,13 @@ if __name__ == "__main__":
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
 
-
-
-    
     # Uncomment these lines to train/save the model if needed.
     if args.traintest == '1':
         env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "forecast")])
         agent = RecurrentPPOAgent(env)
         agent.learn(total_timesteps=200000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
+
     elif args.traintest == '2':
         env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_ratio")])
         agent = RecurrentPPOAgent(env)

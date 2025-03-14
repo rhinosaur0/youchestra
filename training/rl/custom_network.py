@@ -145,7 +145,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         # (padded batch size, features_dim) -> (n_seq, max length, features_dim) -> (max length, n_seq, features_dim)
         # note: max length (max sequence length) is always 1 during data collection
 
-
+        #original features [[nth_time_step], [n+1th_time_step], ..... [kth_time_step], [k+1th_time_step]]
         features_sequence = features.reshape((n_seq, -1, self.lstm_features + 1)).swapaxes(0, 1)
         episode_starts = episode_starts.reshape((n_seq, -1)).swapaxes(0, 1)
 
@@ -154,9 +154,24 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         # If we don't have to reset the state in the middle of a sequence
         # we can avoid the for loop, which speeds up things
         # if th.all(episode_starts == 0.0):
-        #     print('th.all moment')
-        #     lstm_output, lstm_states = lstm(features_sequence, lstm_states)
-        #     lstm_output = th.flatten(lstm_output.transpose(0, 1), start_dim=0, end_dim=1)
+
+        #     # lstm states should be [1, 2, 64] or [1, 1, 64]
+
+        #     features, future_feature = self.obs_split(features)
+        #     batch_size = features.shape[0] // n_seq
+        #     features = features.view(-1, 2, 6)
+        #     print(features[0])
+        #     features = features.permute(2, 0, 1)
+        #     print(features[:, :7, :])
+
+        #     # print(features[[0, batch_size, 2 * batch_size, 3 * batch_size, 4 * batch_size, 5 * batch_size], 0, :])
+        #     lstm_output, lstm_states = lstm(features, lstm_states)
+        #     # print(f'lstm_output: {lstm_output.shape}')
+            
+        #     lstm_output = lstm_output[-1]
+        #     # lstm_output = th.flatten(lstm_output, start_dim=0, end_dim=1)
+        #     # print(f'lstm_output after flatten: {lstm_output.shape}')
+        #     # print(f'lstm_states after flatten: {lstm_states[0].shape}')
         #     return lstm_output, lstm_states
 
         lstm_output = []

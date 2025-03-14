@@ -38,7 +38,7 @@ class MusicAccompanistEnv(gymnasium.Env):
         
         # Create a Dict observation space with separate components for historical data and future reference
         # This better aligns with how TempoPredictor processes the data
-        if option in ["difference", "2row_with_ratio"]:
+        if option in ["difference", "2row_with_ratio", "ratio"]:
             # For options that use a 2D array for historical data plus a future reference
             # The historical window size is window_size-1 since we use the last position for future ref
             hist_shape = (2, self.window_size - 1)
@@ -82,6 +82,15 @@ class MusicAccompanistEnv(gymnasium.Env):
                 future_ref = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32)
                 
                 # Flatten historical data and append future ref
+                return np.concatenate([historical_data.flatten(), future_ref])
+
+            case "ratio":
+                first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+                second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
+                historical_data = second_note - first_note
+                historical_data[0] = historical_data[0] / (historical_data[1] + 1e-8)
+
+                future_ref = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32)
                 return np.concatenate([historical_data.flatten(), future_ref])
                 
             case "2row_with_ratio":
@@ -260,8 +269,8 @@ if __name__ == "__main__":
     parser.add_argument('--output_midi_file', '-o', type=str, help='output midi file', default = "../assets/adjusted_output.mid")
     args = parser.parse_args()
 
-    date = "0312"
-    model_number = "02"
+    date = "0313"
+    model_number = "01"
     window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
@@ -275,7 +284,7 @@ if __name__ == "__main__":
         agent.save(save_model(date, model_number))
 
     elif args.traintest == '2':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "difference")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "ratio")])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
