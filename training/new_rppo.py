@@ -147,11 +147,9 @@ class MusicAccompanistEnv(gymnasium.Env):
         predicted_log_speed = action[0]
         speed_factor = np.exp(predicted_log_speed)
 
+
         predicted_timing = ref_timing * speed_factor
 
-        if predicted_timing == float('inf'):
-            print(f'predicted_log_speed: {predicted_log_speed}, speed_factor: {speed_factor}')
-            # raise ValueError("Predicted timing is infinite. Check for division by zero.")
 
         # reward = self.reward_function(predicted_timing, solo_timing, action[0])
         reward = self.new_reward_function(solo_timing, ref_timing, action[0])
@@ -198,7 +196,7 @@ class RecurrentPPOAgent:
 
     def _initialize(self) -> None:
         if self.file_path is None:
-            self.model = CustomRPPO("Custom", env, verbose=1, policy_kwargs={"lstm_features": 2 * 6})
+            self.model = CustomRPPO("Custom", env, verbose=1, batch_size = 64, n_steps = 128, policy_kwargs={"lstm_features": 2 * 6})
         else:
             self.model = CustomRPPO.load(self.file_path)
 
@@ -219,6 +217,7 @@ class RecurrentPPOAgent:
             deterministic=True
         )
         self.episode_starts = np.zeros((1,), dtype=bool)
+        
         return action
 
     def save(self, file_path: str) -> None:
