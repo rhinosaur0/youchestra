@@ -84,20 +84,20 @@ class CustomRecurrentRolloutBuffer(RecurrentRolloutBuffer):
         while start_idx < self.buffer_size * self.n_envs:
             batch_inds = indices[start_idx : start_idx + batch_size]
             yield RecurrentRolloutBufferSamples(
-                observations = th.from_numpy(self.observations[batch_inds]),
-                actions = th.from_numpy(self.actions[batch_inds]),
-                old_values = th.from_numpy(self.values[batch_inds].squeeze(1)),
-                old_log_prob = th.from_numpy(self.log_probs[batch_inds].squeeze(1)),
-                advantages = th.from_numpy(self.advantages[batch_inds].squeeze(1)),
-                returns = th.from_numpy(self.returns[batch_inds].squeeze(1)),
+                observations = th.from_numpy(self.observations[batch_inds]).to(self.device),
+                actions = th.from_numpy(self.actions[batch_inds]).to(self.device),
+                old_values = th.from_numpy(self.values[batch_inds].squeeze(1)).to(self.device),
+                old_log_prob = th.from_numpy(self.log_probs[batch_inds].squeeze(1)).to(self.device),
+                advantages = th.from_numpy(self.advantages[batch_inds].squeeze(1)).to(self.device),
+                returns = th.from_numpy(self.returns[batch_inds].squeeze(1)).to(self.device),
                 lstm_states = RNNStates(
-                    (th.from_numpy(self.hidden_states_pi[batch_inds]).permute(1, 0, 2), 
-                    th.from_numpy(self.cell_states_pi[batch_inds]).permute(1, 0, 2)),
-                    (th.from_numpy(self.hidden_states_vf[batch_inds]).permute(1, 0, 2),
-                    th.from_numpy(self.cell_states_vf[batch_inds]).permute(1, 0, 2)),
+                    (th.from_numpy(self.hidden_states_pi[batch_inds]).permute(1, 0, 2).to(self.device), 
+                    th.from_numpy(self.cell_states_pi[batch_inds]).permute(1, 0, 2).to(self.device)),
+                    (th.from_numpy(self.hidden_states_vf[batch_inds]).permute(1, 0, 2).to(self.device),
+                    th.from_numpy(self.cell_states_vf[batch_inds]).permute(1, 0, 2).to(self.device)),
                 ),
-                episode_starts = th.from_numpy(self.episode_starts[batch_inds].squeeze(1)),
-                mask = th.from_numpy(np.ones_like(self.returns[batch_inds]).squeeze(1))
+                episode_starts = th.from_numpy(self.episode_starts[batch_inds].squeeze(1)).to(self.device),
+                mask = th.from_numpy(np.ones_like(self.returns[batch_inds]).squeeze(1)).to(self.device)
             )
             # yield self._get_samples(batch_inds, env_change)
             start_idx += batch_size
