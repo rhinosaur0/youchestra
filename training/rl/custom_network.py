@@ -22,10 +22,9 @@ from gymnasium import spaces
 
 
 class CustomRecurrentRolloutBuffer(RecurrentRolloutBuffer):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def add(self, *args, lstm_states: RNNStates, **kwargs):
+        super().add(*args, lstm_states = lstm_states, **kwargs)
 
-    
     def get(self, batch_size: Optional[int] = None):
         '''
         This is modified from the original SB3 code to handle the custom LSTM
@@ -199,8 +198,13 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
                 **self.lstm_kwargs,
             )
 
+        self.future_feature_proj = nn.Sequential(
+            nn.Linear(1, 16),
+            nn.ReLU(),
+            nn.Linear(16, 16)
+        )
         self.post_concat_layer = nn.Sequential(
-            nn.Linear(lstm_hidden_size + 1, lstm_hidden_size),
+            nn.Linear(lstm_hidden_size + 16, lstm_hidden_size),
             nn.ReLU()
         )
         # Setup optimizer with initial learning rate
@@ -227,46 +231,41 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         :param lstm: LSTM object.
         :return: LSTM output and updated LSTM states.
         """
-        # LSTM logic
-        # (sequence length, batch size, features dim)
-        # (batch size = n_envs for data collection or n_seq when doing gradient update)
         n_seq = lstm_states[0].shape[1]
-        # Batch to sequence
-        # (padded batch size, features_dim) -> (n_seq, max length, features_dim) -> (max length, n_seq, features_dim)
-        # note: max length (max sequence length) is always 1 during data collection
 
-        #original features [[nth_time_step], [n+1th_time_step], ..... [kth_time_step], [k+1th_time_step]]
-        features_sequence = features.reshape((n_seq, -1, self.lstm_features + 1)).swapaxes(0, 1)
-        episode_starts = episode_starts.reshape((n_seq, -1)).swapaxes(0, 1)
 
-        # print(f'features_sequence: {features_sequence.shape}, episode_starts: {episode_starts.shape}')
-
-        # If we don't have to reset the state in the middle of a sequence
-        # we can avoid the for loop, which speeds up things
-        if th.all(episode_starts == 0.0):
+        # if th.all(episode_starts == 0.0):
 
             # lstm states should be [1, 2, 64] or [1, 1, 64]
 
-            features, future_feature = self.obs_split(features)
-            batch_size = features.shape[0] // n_seq
-            features = features.view(-1, 2, 6)
-            features = features.permute(2, 0, 1)
-            lstm_output, lstm_states = lstm(features, lstm_states)
-            # print(f'lstm_output: {lstm_output.shape}')
-            
-            lstm_output = lstm_output[-1]
-            # lstm_output = th.flatten(lstm_output, start_dim=0, end_dim=1)
-            # print(f'lstm_output after flatten: {lstm_output.shape}')
-            # print(f'lstm_states after flatten: {lstm_states[0].shape}')
-            return lstm_output, lstm_states
+        features, future_feature = self.obs_split(features)
+        features = features.view(-1, 2, 6)
+        features = features.permute(2, 0, 1)
+        lstm_output, lstm_states = lstm(
+            features, 
+            (
+                (1.0 - episode_starts).view(1, n_seq, 1) * lstm_states[0],
+                (1.0 - episode_starts).view(1, n_seq, 1) * lstm_states[1],
+            )
+        )
+        hidden_last = lstm_output[-1]
+        future_feature = self.future_feature_proj(future_feature.unsqueeze(1))
 
+        combined = th.cat([hidden_last, future_feature], dim=1)  
+        final_hidden = self.post_concat_layer(combined)  
+
+        return final_hidden, lstm_states
+        
+        features_sequence = features.reshape((n_seq, -1, self.lstm_features + 1)).swapaxes(0, 1)
+        episode_starts = episode_starts.reshape((n_seq, -1)).swapaxes(0, 1)
         lstm_output = []
+
+
 
         for features, episode_start in zip_strict(features_sequence, episode_starts):
             batch_size = features.shape[0]
             features, future_feature = self.obs_split(features)
             features = features.view(batch_size, 2, 6).permute(2, 0, 1)
-
 
             hidden, lstm_states = lstm(
                 features,
