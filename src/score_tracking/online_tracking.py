@@ -1,6 +1,6 @@
 import numpy as np
-from utils.lin_reg import train_linear_regression, predict_tempo_with_linear_regression
 import librosa
+
 
 def pitch_distance(ref_pitch, perf_pitch):
     semitone_diff = abs(ref_pitch - perf_pitch)
@@ -10,6 +10,7 @@ def pitch_distance(ref_pitch, perf_pitch):
         return 0.5  # Small penalty for nearby notes
     else:
         return 3.0  # Large penalty for outliers (hallucinations)
+
 
 def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment_progress, pitch_threshold=12):
 
@@ -91,7 +92,6 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
     ref_attributes = np.stack(([ref_times[j] for i, j in alignment_path], [ref_pitches[j] for i, j in alignment_path]), axis=1).T
     print(solo_input)
     predicted_speed, wp, matrix = compute_speed_factor(user_attributes, ref_attributes)
-    print(f'Speed factor: {predicted_speed}')
 
 
     # Get the reference time aligned to the last user note
@@ -99,6 +99,9 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
     current_ref_time = ref_times[last_ref_idx]
 
     return current_ref_time, predicted_speed
+
+
+
 
 
 def combined_distance(x, y, time_weight=1.0, pitch_weight=0.0):
@@ -113,6 +116,8 @@ def combined_distance(x, y, time_weight=1.0, pitch_weight=0.0):
     time_diff = np.abs(x[0] - y[0])
     pitch_diff = pitch_distance(x[1], y[1])
     return time_weight * time_diff + pitch_weight * pitch_diff
+
+
 
 def compute_speed_factor(soloist_features, ref_features, time_weight=1.0, pitch_weight=0.5):
     """

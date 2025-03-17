@@ -1,5 +1,5 @@
 import time
-from utils.dtw import dtw_pitch_alignment_with_speed
+from score_tracking.online_tracking import dtw_pitch_alignment_with_speed
  
 class Conductor:
     def __init__(self, solo_events, accomp_player, solo_tracker):

@@ -10,7 +10,7 @@ from stable_baselines3.common.torch_layers import (
     BaseFeaturesExtractor,
     FlattenExtractor,
 )
-from stable_baselines3.common.utils import zip_strict, get_schedule_fn
+from stable_baselines3.common.utils import get_schedule_fn
 from sb3_contrib.common.recurrent.type_aliases import RNNStates
 
 
@@ -20,6 +20,7 @@ import torch as th
 from gymnasium import spaces
 
 from .buffer import CustomRecurrentRolloutBuffer
+from .memory import retrieve_memory, store_memory
 
 
 class CustomRecurrentACP(RecurrentActorCriticPolicy):
@@ -49,9 +50,11 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         enable_critic_lstm: bool = True,
         lstm_kwargs: Optional[dict[str, Any]] = None,
         lstm_features: int = 7,
+        training_mode: str = 'init', # 'init' means background training, 'live' means app feature training, 'test' means evaluation
     ):
         self.lstm_features = lstm_features
         self.lstm_output_dim = lstm_hidden_size
+        self.training = training_mode
 
         super().__init__(
             observation_space,
@@ -131,6 +134,19 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
 
     def obs_split(self, obs):
         return obs[:, :-1], obs[:, -1]
+    
+    def obs_split_with_memory_index(self, obs):
+        return obs[:, 0], obs[:, 1:-1], obs[:, -1]
+    
+    def set_training_mode(self, mode):
+        if mode == True:
+            self.training = 'init'
+            super().set_training_mode(mode)
+        elif mode == False:
+            self.training = 'test'
+            super().set_training_mode(mode)
+        else:
+            self.training = 'live'
 
     # @staticmethod
     def _process_sequence(self, 
@@ -156,7 +172,12 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
 
             # lstm states should be [1, 2, 64] or [1, 1, 64]
 
-        features, future_feature = self.obs_split(features)
+        
+        # features, future_feature = self.obs_split(features)
+        memory_indices, features, future_feature = self.obs_split_with_memory_index(features)
+        memory_features = retrieve_memory(memory_indices, filename = "rl/memory.h5")
+        print(memory_features)
+
         features = features.view(-1, 2, 6)
         features = features.permute(2, 0, 1)
         lstm_output, lstm_states = lstm(
@@ -172,8 +193,11 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         combined = th.cat([hidden_last, future_feature], dim=1)  
         final_hidden = self.post_concat_layer(combined)  
 
+        if self.training == 'live':
+            store_memory(memory_indices, features)
+            
         return final_hidden, lstm_states
-    
+        
 
 
 

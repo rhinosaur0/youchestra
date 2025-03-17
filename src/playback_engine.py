@@ -41,6 +41,7 @@ class AccompanimentPlayer:
     def stop_playback(self):
         self.playing = False
 
+
     def _play_thread(self):
         i = 0
         modif = 0
