@@ -25,15 +25,29 @@ def extract_midi_onsets_and_pitches(midi_file, include_notes = False, instrument
     """
     import numpy as np
     import pretty_midi
+    import mido
     pm = pretty_midi.PrettyMIDI(midi_file)
+    
     # Select an instrument (assumes that the desired soloist is in one track)
     instrument = pm.instruments[instrument_index]
     # Sort the notes by their start time
     notes = sorted(instrument.notes, key=lambda note: note.start)
     onset_times = np.array([note.start for note in notes])
+
+    onset_times[35:] -= onset_times[35]
+    onset_times = onset_times[35:]
+
     pitches = np.array([note.pitch for note in notes])
+    pitches = pitches[35:]
     if include_notes:
-        return np.stack((pitches, onset_times))
+        final = np.stack((pitches, onset_times))
+        return final
+    
+    origin = onset_times[288]
+    for i in range(289, 544):
+        onset_times[i] += onset_times[i] - origin
+    onset_times[544:] += (onset_times[543] - origin) / 2
+    
     return onset_times
 
 def write_midi_from_timings(timings, notes, window_size, output_midi_file="output.mid", default_duration=0.3):

@@ -39,7 +39,7 @@ class MusicAccompanistEnv(gymnasium.Env):
         
         # Create a Dict observation space with separate components for historical data and future reference
         # This better aligns with how TempoPredictor processes the data
-        if option in ["difference", "2row_with_ratio", "ratio", "difference_first_scaled"]:
+        if option in ["difference", "2row_with_ratio", "ratio", "normalized_reference"]:
             self.observation_space = spaces.Box(low=0, high=10.0, shape=(self.window_size * 2 - 1,), dtype=np.float32)
         elif option == "raw":
             flat_dim = 2 * self.window_size + 1
@@ -88,7 +88,7 @@ class MusicAccompanistEnv(gymnasium.Env):
                 historical_data[1] = historical_data[1] * scale
                 
                 future_ref = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32) * scale
-
+                print(np.concatenate([historical_data.flatten(), future_ref]))
                 return np.concatenate([historical_data.flatten(), future_ref])
 
             case "ratio":
@@ -99,7 +99,18 @@ class MusicAccompanistEnv(gymnasium.Env):
 
                 future_ref = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32)
                 return np.concatenate([historical_data.flatten(), future_ref])
-                
+        
+            case "normalized_reference":
+                scale = 1 / 12 / 0.26086426
+                first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
+                second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index].astype(np.float32)
+                historical_data = second_note - first_note
+                historical_data[0] = historical_data[0] / (historical_data[1] + 1e-8)
+                historical_data[1] = historical_data[1] * scale
+
+                future_ref = np.array([self.data[1, self.current_index] - self.data[1, self.current_index - 1]], dtype=np.float32) * scale
+                return np.concatenate([historical_data.flatten(), future_ref])
+
             case "2row_with_ratio":
                 # Historical data: differences between consecutive time steps
                 first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
@@ -278,8 +289,8 @@ if __name__ == "__main__":
     parser.add_argument('--output_midi_file', '-o', type=str, help='output midi file', default = "../assets/adjusted_output.mid")
     args = parser.parse_args()
 
-    date = "0315"
-    model_number = "11"
+    date = "0316"
+    model_number = "01"
     window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
@@ -287,13 +298,13 @@ if __name__ == "__main__":
     
     # Uncomment these lines to train/save the model if needed.
     if args.traintest == '1':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "difference")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "normalized_reference")])
         agent = RecurrentPPOAgent(env)
         agent.learn(total_timesteps=100000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
 
     elif args.traintest == '2':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "difference")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "normalized_reference")])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
