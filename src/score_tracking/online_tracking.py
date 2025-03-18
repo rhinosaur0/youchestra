@@ -1,5 +1,129 @@
 import numpy as np
 import librosa
+from numpy.typing import NDArray
+from .oltw import Euclidean, oltw_loop
+
+class OnlineTracker:
+    def __init__(self, 
+                 reference_features = None, 
+                 window_size = 16, 
+                 step_size = 5, 
+                 local_cost_fun = Euclidean, 
+                 start_window_size = 12):
+        self.reference_features = reference_features
+        self.last_index = reference_features.shape[0]
+        self.window_size = window_size
+        self.step_size = step_size
+        self.local_cost_fun = local_cost_fun
+        self.start_window_size = start_window_size
+
+        self.input_features: NDArray = None
+        self.global_cost_matrix = NDArray[np.float32] = (
+            np.ones((reference_features.shape[0] + 1, 2)) * np.inf
+        )
+        self.input_index = 0
+        self.update_window_index = False
+
+        self.current_position = 0
+
+
+    def get_window(self):
+        w_size = self.window_size
+        if self.current_position < self.start_window_size:
+            w_size = self.start_window_size
+        window_start = max(self.current_position - w_size, 0)
+        window_end = min(self.current_position + w_size, self.last_index)
+        return window_start, window_end
+    
+    def reset(self):
+        pass
+    
+    def step(self, input_features):
+        '''
+        input_features: np.array of shape (1, 2), where the first element is the time and the second element is the pitch
+        '''
+
+        self.input_features = self.input_features + input_features
+        self.N_input = self.input_features.shape[0]
+
+        if self.update_window_index:
+            self.window_start, self.window_end = self.get_window()
+            self.update_window_index = False
+
+        if self.current_position >= self.N_input:
+            return None
+        
+
+        if self.current_position == 0:
+            self.global_cost_matrix[0, 0] = 0
+            self.global_cost_matrix[1:self.window_end + 1, 0] = np.cumsum(
+                self.local_cost_fun(self.input_features[0], self.reference_features, axis=1)
+            )
+            return
+        
+        local_costs = self.local_cost_fun(self.input_features, self.reference_features[self.window_start:self.window_end + 1], axis=1)
+        min_costs, min_cost_index = -float('inf'), 0
+
+        cur_checker_index = self.window_start
+        while cur_checker_index < self.window_end:
+            
+
+            cost1 = self.global_cost_matrix[cur_checker_index, 0] + local_costs[cur_checker_index - self.window_start]
+            cost2 = self.global_cost_matrix[cur_checker_index + 1, 0] + local_costs[cur_checker_index - self.window_start + 1]
+            cost3 = self.global_cost_matrix[cur_checker_index, 1] + local_costs[cur_checker_index - self.window_start + 1]
+            temp_min = min(cost1, cost2, cost3)
+            self.global_cost_matrix[cur_checker_index + 1, 1] = temp_min
+
+            norm_cost = temp_min / (cur_checker_index - self.window_start + 1)
+
+            if norm_cost < min_costs:
+                min_costs = norm_cost
+                min_cost_index = cur_checker_index
+
+            cur_checker_index += 1
+        
+        self.global_cost_matrix[:, 0] = self.global_cost_matrix[:, 1]
+        self.global_cost_matrix[:, 1] = np.inf
+
+        self.current_position = self.current_position = min(
+            max(self.current_position, min_cost_index),
+            self.current_position + self.step_size,
+        )
+
+        return self.reference_features[self.current_position, 1]
+
+        # for i in range(self.window_start, self.window_end):
+        #     if i < self.current_position:
+        #         continue
+        #     if i == self.window_start:
+        #         self.global_cost_matrix[0, 1] = self.global_cost_matrix[0, 0] + self.local_cost_fun(
+        #             self.input_features[i], self.reference_features[0]
+        #         )
+        #     else:
+        #         self.global_cost_matrix[0, 1] = self.global_cost_matrix[0, 0] + self.local_cost_fun(
+        #             self.input_features[i], self.reference_features[0]
+        #         )
+        #         self.global_cost_matrix[1:, 1] = np.minimum(
+        #             self.global_cost_matrix[1:, 0],
+        #             np.minimum(
+        #                 self.global_cost_matrix[:-1, 0],
+        #                 self.global_cost_matrix[:-1, 1],
+        #             ),
+        #         ) + self.local_cost_fun(self.input_features[i], self.reference_features)
+        #     self.global_cost_matrix[:, 0] = self.global_cost_matrix[:, 1]
+        # self.current_position += self.step_size
+        # if self.current_position >= self.N_input:
+        #     return None
+        # return self.global_cost_matrix[-1, 0]
+    
+
+        
+
+        
+        
+        
+
+
 
 
 def pitch_distance(ref_pitch, perf_pitch):
@@ -43,17 +167,21 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
     # Fill the cost matrix
     for i in range(1, I+1):
         for j in range(1, J+1):
-            pitch_dist = pitch_distance(user_pitches[i-1], ref_pitches[j-1]) 
-            # pitch_dist = abs(user_pitches[i-1] - ref_pitches[j-1])
+            pitch_cost = pitch_distance(user_pitches[i-1], ref_pitches[j-1])
+            # pitch_cost = abs(user_pitches[i-1] - ref_pitches[j-1])
 
-            if pitch_dist > pitch_threshold:
+            if pitch_cost > pitch_threshold:
                 D[i, j] = D[i-1, j]
             else:
-                D[i, j] = pitch_dist + min(
+                D[i, j] = pitch_cost + min(
                     D[i-1, j],    # Deletion (user note skipped)
                     D[i, j-1],    # Insertion (reference note skipped)
                     D[i-1, j-1]   # Match or substitute
                 )
+    
+    # for i in range(1, I+1):
+    #     for j in range(1, J+1):
+    #         D[i, j] = D[i, j] / (max(i, j))
 
     alignment_path = []
     alignment_path_pitches = []
@@ -90,7 +218,6 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
     solo_input = np.array([[user_pitches[i], user_times[i], ref_pitches[j], ref_times[j]] for i, j in alignment_path])
     user_attributes = np.stack(([user_times[i] for i, j in alignment_path], [user_pitches[i] for i, j in alignment_path]), axis=1).T
     ref_attributes = np.stack(([ref_times[j] for i, j in alignment_path], [ref_pitches[j] for i, j in alignment_path]), axis=1).T
-    print(solo_input)
     predicted_speed, wp, matrix = compute_speed_factor(user_attributes, ref_attributes)
 
 

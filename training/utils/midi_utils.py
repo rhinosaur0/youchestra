@@ -25,7 +25,6 @@ def extract_midi_onsets_and_pitches(midi_file, include_notes = False, instrument
     """
     import numpy as np
     import pretty_midi
-    import mido
     pm = pretty_midi.PrettyMIDI(midi_file)
     
     # Select an instrument (assumes that the desired soloist is in one track)

@@ -13,15 +13,16 @@ class AccompanimentPlayer:
         self.partition = None
         self.notes = []
         self.current_progression = 0
+        self.reference_features = None
 
         self.tnow = 0
         self.tstart = 0
+        self.length = 0
 
     def load_events(self, midifile):
 
         for n in range(0, 88):
             self.notes.append(Note(n))
-
         try:
             mid = mido.MidiFile(midifile)
             filename, _ = os.path.splitext(os.path.split(midifile)[1])
@@ -32,6 +33,7 @@ class AccompanimentPlayer:
         partition, length = get_partition(mid)
         
         self.partition = partition
+        self.length = length
 
     def start_playback(self, barrier):
         self.playing = True

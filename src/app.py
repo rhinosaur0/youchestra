@@ -1,4 +1,4 @@
-from utils.midi_utils import parse_midi
+from utils.midi_utils import parse_midi, extract_midi_onsets_and_pitches
 from solo_tracker import SoloTracker
 from playback_engine import AccompanimentPlayer
 from conductor import Conductor
