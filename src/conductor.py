@@ -1,4 +1,5 @@
 import time
+import numpy as np
 from score_tracking.online_tracking import dtw_pitch_alignment_with_speed, OnlineTracker
  
 class Conductor:
@@ -8,7 +9,7 @@ class Conductor:
         self.solo_tracker = solo_tracker
         self.current_solo_index = 0
         self.solo_pitch_history = []
-        print(self.solo_events.shape)
+
         self.adjuster = OnlineTracker(self.solo_events)
         
 
@@ -53,8 +54,7 @@ class Conductor:
             else:
                 continue
 
-            soloist_progression = self.adjuster.step(latest_pitch, accompanist_progression)
-            print(self.solo_events.shape)
+            soloist_progression = self.adjuster.step(np.array([time.time() - start_time, latest_pitch]))
 
             # print(self.solo_pitch_history)
             # print(solo_pitch_reference)
@@ -72,9 +72,9 @@ class Conductor:
             #     soloist_first_event = i
             #     solo_pitch_reference = new_window
 
-            soloist_progression, predicted_speed = dtw_pitch_alignment_with_speed(
-                self.solo_pitch_history, solo_pitch_reference, accompanist_progression
-            )
+            # soloist_progression, predicted_speed = dtw_pitch_alignment_with_speed(
+            #     self.solo_pitch_history, solo_pitch_reference, accompanist_progression
+            # )
             print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}\n')
 
             # TODO - Implement tempo adjustment based on final model

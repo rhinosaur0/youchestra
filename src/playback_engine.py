@@ -13,7 +13,6 @@ class AccompanimentPlayer:
         self.partition = None
         self.notes = []
         self.current_progression = 0
-        self.reference_features = None
 
         self.tnow = 0
         self.tstart = 0

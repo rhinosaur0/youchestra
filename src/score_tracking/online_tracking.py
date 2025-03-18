@@ -1,7 +1,6 @@
 import numpy as np
 import librosa
-from numpy.typing import NDArray
-from .oltw import Euclidean, oltw_loop
+from .oltw import Euclidean
 
 class OnlineTracker:
     def __init__(self, 
@@ -11,20 +10,21 @@ class OnlineTracker:
                  local_cost_fun = Euclidean, 
                  start_window_size = 12):
         self.reference_features = reference_features
-        self.last_index = reference_features.shape[0]
+        self.last_index = len(reference_features)
         self.window_size = window_size
         self.step_size = step_size
         self.local_cost_fun = local_cost_fun
         self.start_window_size = start_window_size
 
-        self.input_features: NDArray = None
-        self.global_cost_matrix = NDArray[np.float32] = (
-            np.ones((reference_features.shape[0] + 1, 2)) * np.inf
+        self.input_features = np.array([])
+        self.global_cost_matrix = (
+            np.ones((len(reference_features) + 1, 2)) * np.inf
         )
         self.input_index = 0
         self.update_window_index = False
 
         self.current_position = 0
+        self.input_index = 0
 
 
     def get_window(self):
@@ -42,39 +42,37 @@ class OnlineTracker:
         '''
         input_features: np.array of shape (1, 2), where the first element is the time and the second element is the pitch
         '''
-
-        self.input_features = self.input_features + input_features
+        self.input_features = np.append(self.input_features, input_features, axis = 0)
         self.N_input = self.input_features.shape[0]
 
-        if self.update_window_index:
-            self.window_start, self.window_end = self.get_window()
-            self.update_window_index = False
-
-        if self.current_position >= self.N_input:
-            return None
+        self.window_start, self.window_end = self.get_window()
+        # if self.current_position >= self.N_input:
+        #     return None
+        self.input_index += 1
         
-
         if self.current_position == 0:
             self.global_cost_matrix[0, 0] = 0
             self.global_cost_matrix[1:self.window_end + 1, 0] = np.cumsum(
-                self.local_cost_fun(self.input_features[0], self.reference_features, axis=1)
+                self.local_cost_fun(int(input_features[1]), self.reference_features[:self.window_end])
             )
-            return
+            self.current_position += 1
+
+            return self.reference_features[0][0]
         
-        local_costs = self.local_cost_fun(self.input_features, self.reference_features[self.window_start:self.window_end + 1], axis=1)
-        min_costs, min_cost_index = -float('inf'), 0
+        local_costs = self.local_cost_fun(input_features[1], self.reference_features[self.window_start:self.window_end + 1])
+        min_costs, min_cost_index = float('inf'), 0
 
         cur_checker_index = self.window_start
         while cur_checker_index < self.window_end:
             
 
             cost1 = self.global_cost_matrix[cur_checker_index, 0] + local_costs[cur_checker_index - self.window_start]
-            cost2 = self.global_cost_matrix[cur_checker_index + 1, 0] + local_costs[cur_checker_index - self.window_start + 1]
-            cost3 = self.global_cost_matrix[cur_checker_index, 1] + local_costs[cur_checker_index - self.window_start + 1]
+            cost2 = self.global_cost_matrix[cur_checker_index + 1, 0] + local_costs[cur_checker_index - self.window_start]
+            cost3 = self.global_cost_matrix[cur_checker_index, 1] + local_costs[cur_checker_index - self.window_start]
             temp_min = min(cost1, cost2, cost3)
             self.global_cost_matrix[cur_checker_index + 1, 1] = temp_min
 
-            norm_cost = temp_min / (cur_checker_index - self.window_start + 1)
+            norm_cost = temp_min / (cur_checker_index - self.window_start + 1 + self.input_index)
 
             if norm_cost < min_costs:
                 min_costs = norm_cost
@@ -90,7 +88,7 @@ class OnlineTracker:
             self.current_position + self.step_size,
         )
 
-        return self.reference_features[self.current_position, 1]
+        return self.reference_features[self.current_position][0]
 
         # for i in range(self.window_start, self.window_end):
         #     if i < self.current_position:
