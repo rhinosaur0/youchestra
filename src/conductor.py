@@ -54,6 +54,8 @@ class Conductor:
             else:
                 continue
 
+            print(self.solo_pitch_history)
+
             soloist_progression = self.adjuster.step(np.array([time.time() - start_time, latest_pitch]))
 
             # print(self.solo_pitch_history)

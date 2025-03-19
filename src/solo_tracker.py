@@ -36,7 +36,7 @@ class SoloTracker:
             confidence = self.pitch_detector.get_confidence()
             energy = np.sqrt(np.mean(samples**2))
 
-            if pitch > 0 and energy > 0.015 and confidence > 0.8:
+            if pitch > 0 and energy > 0.015 and confidence > 0.95:
                 self.pitches.put(pitch)
                 confidence = self.pitch_detector.get_confidence()
                 self.confidences += [confidence]

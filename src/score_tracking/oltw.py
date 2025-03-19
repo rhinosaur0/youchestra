@@ -6,10 +6,10 @@ def Euclidean(x, y):
     Y is the reference pitches
     '''
     result = np.array([])
-    print(x, y)
     for _, notes, _ in y:
         if len(notes) >= 1:
-            result = np.append(result, np.min([pitch_distance(x, note) for note in notes]))
+            result = np.append(result, np.min([pitch_distance(x, note) for note in notes])) # in the case that there are multiple notes,
+                                                                                            # use the smallest distance
         else:
             result = np.append(result, pitch_distance(x, notes[0]))
 
