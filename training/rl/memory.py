@@ -1,6 +1,7 @@
 
 import h5py
 import numpy as np
+import torch as th
 
 
 def memory_noise(features, noise_std):
@@ -58,6 +59,8 @@ def retrieve_memory(piece_index, filename="memory.h5"):
     Returns a dictionary mapping each piece index to a list (or array) of memory vectors,
     maintaining the original order of input indices.
     """
+    if isinstance(piece_index, th.Tensor):
+        piece_index = piece_index.cpu().numpy()
     with h5py.File(filename, "r") as f:
         mem_ds = f["memories"]   # shape: (num_piece_indices, max_runs, obs_dim)
         run_ds = f["run_ids"]    # shape: (num_piece_indices, max_runs)
