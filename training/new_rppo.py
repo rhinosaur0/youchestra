@@ -221,10 +221,10 @@ if __name__ == "__main__":
 
 
     date = "0319"
-    model_number = "01"
+    model_number = "02"
     window_size = 7
     windows = args.windows
-    memory_write_prob = 0.3
+    memory_write_prob = 0.5
 
     model_name = save_model(date, model_number)
     memory_name = save_memory(date, model_number)
@@ -235,7 +235,9 @@ if __name__ == "__main__":
             print("Operation cancelled.")
             exit(1)
         initialize_memory_file(memory_name)
+        
         print("Memory reset successful.")
+
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
     fed_data = data[1:, :] # Remove the pitches for now
@@ -263,8 +265,12 @@ if __name__ == "__main__":
     
     elif args.traintest == '4': # getting summary of model architecture
         agent.model = agent.model.load(model_name)
-        # print(agent.get_policy())
-        print(summary(agent.get_policy(), (6, 2), device="cpu"))
+        state_dict = agent.model.policy.state_dict()
+        for name, param in state_dict.items():
+            print(name, param.size())
+            if name == 'post_concat_layer.0.weight':
+                print(param)
+
 
 
 
