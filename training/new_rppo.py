@@ -180,7 +180,7 @@ class MusicAccompanistEnv(gymnasium.Env):
             second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index + 1].astype(np.float32)
             memory = second_note - first_note
             memory = memory[0] / (memory[1] + 1e-8)
-            new_obs = memory_noise(memory, 0.1)
+            new_obs = memory_noise(memory, 0.05)
             store_memory(piece_index = self.current_index - self.window_size, memory_vector= new_obs, filename = "rl/memory.h5")
         
         self.current_index += 1
@@ -191,8 +191,8 @@ class MusicAccompanistEnv(gymnasium.Env):
         
         if not done:
             obs = self.obs_prep(False)
-            if self.current_index % 200 == 0:
-                print(f"Current index: {self.current_index}, Reward: {reward}, Action: {action}")
+            # if self.current_index % 200 == 0:
+            #     print(f"Current index: {self.current_index}, Reward: {reward}, Action: {action}")
         else:
             obs = np.zeros(self.observation_space.shape, dtype=np.float32)
             
@@ -307,7 +307,7 @@ if __name__ == "__main__":
         print("Memory reset successful.")
 
     date = "0318"
-    model_number = "01"
+    model_number = "02"
     window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
@@ -316,15 +316,15 @@ if __name__ == "__main__":
     
     # Uncomment these lines to train/save the model if needed.
     if args.traintest == '1':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(fed_data, 'all', window_size, "memory_enhanced", write_to_memory=True)])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(fed_data, 'all', window_size, "memory_enhanced", write_to_memory=False)])
         agent = RecurrentPPOAgent(env)
-        agent.learn(total_timesteps=100000, log_interval=10, verbose=1)
+        agent.learn(total_timesteps=50000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
 
     elif args.traintest == '2':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(fed_data, 'all', window_size, "memory_enhanced", write_to_memory=False)])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(fed_data, 'all', window_size, "memory_enhanced", memory_file = f'../models/{date}/{date}_{model_number}.h5', write_to_memory=False)])
         agent = RecurrentPPOAgent(env)
-        agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
+        agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}.zip")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
         predicted_timings = episodes_timings[0]
         write_midi_from_timings(predicted_timings, data[0, :], window_size, output_midi_file="../assets/adjusted_output.mid", default_duration=0.3)

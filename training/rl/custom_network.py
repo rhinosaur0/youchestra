@@ -198,7 +198,9 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         batch_size = features.shape[0]
         memory_indices, cur_features, ref_features = self.mem_cur_ref_split(features)
         memoryraw = th.from_numpy(retrieve_memory(memory_indices, filename = "rl/memory.h5")).to(self.device)
-
+        if batch_size == 1:
+            print(cur_features)
+            print(memoryraw)
 
         m1 = self.memory_projector(memoryraw[:, 0, :].squeeze(dim = 1).float()) * th.ones((batch_size, self.memory_dim)) * self.memory_discount_factor
         m2 = self.memory_projector(memoryraw[:, 1, :].squeeze(dim = 1).float()) * th.ones((batch_size, self.memory_dim)) * (1 - self.memory_discount_factor) * self.memory_discount_factor
