@@ -221,10 +221,10 @@ if __name__ == "__main__":
 
 
     date = "0319"
-    model_number = "02"
+    model_number = "03"
     window_size = 7
     windows = args.windows
-    memory_write_prob = 0.5
+    memory_write_prob = 0.3
 
     model_name = save_model(date, model_number)
     memory_name = save_memory(date, model_number)
@@ -237,6 +237,7 @@ if __name__ == "__main__":
         initialize_memory_file(memory_name)
         
         print("Memory reset successful.")
+    # initialize_memory_file(memory_name)
 
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")

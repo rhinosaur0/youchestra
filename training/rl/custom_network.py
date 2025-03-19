@@ -56,9 +56,10 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         training_mode: str = 'init', # 'init' means background training, 'live' means app feature training, 'test' means evaluation
         memory_dropout_prob: float = 0.5,
     ):
+        self.training_mode = training_mode
         self.lstm_features = lstm_features
         self.lstm_output_dim = lstm_hidden_size
-        self.training = training_mode
+        # self.training = training_mode
         self.memory_dim = memory_dim
         self.memory_discount_factor = memory_discount_factor
         self.ref_context_dim = ref_context_dim
@@ -170,14 +171,17 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         return obs[:, 0], obs[:, 1:7], obs[:, 7:]
     
     def set_training_mode(self, mode):
+
         if mode == True:
-            self.training = 'init'
+            self.training_mode = 'init'
             super().set_training_mode(mode)
+
+            
         elif mode == False:
-            self.training = 'test'
+            self.training_mode = 'test'
             super().set_training_mode(mode)
         else:
-            self.training = 'live'
+            self.training_mode = 'live'
 
     # @staticmethod
     def _process_sequence(self, 
@@ -224,7 +228,8 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
 
         mem_ref_features = self.mem_ref_fusion_layer(th.cat([mem_features, ref_features], dim=1))
         cur_ref_features = self.cur_ref_fusion_layer(th.cat([cur_features, ref_features], dim=1))
-        if self.training == 'init':
+
+        if self.training_mode == 'init':
             mem_ref_features = F.dropout(mem_ref_features, p = self.memory_dropout_prob)
         final_hidden_features = self.post_concat_layer(th.cat([cur_ref_features, mem_ref_features], dim=1))
 
