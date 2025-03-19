@@ -54,6 +54,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         memory_discount_factor: float = 0.9,
         ref_context_dim: int = 32,
         training_mode: str = 'init', # 'init' means background training, 'live' means app feature training, 'test' means evaluation
+        memory_file: str = 'rl/memory.h5'
     ):
         self.lstm_features = lstm_features
         self.lstm_output_dim = lstm_hidden_size
@@ -61,6 +62,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         self.memory_dim = memory_dim
         self.memory_discount_factor = memory_discount_factor
         self.ref_context_dim = ref_context_dim
+        self.memory_file = memory_file
 
         super().__init__(
             observation_space,
@@ -128,6 +130,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
             nn.ReLU(),
         )
         self.memory_projector = nn.Linear(7, self.memory_dim)
+        self.memory_gate = nn.Parameter(th.tensor([0.9, 0.09, 0.009], requires_grad=True))
         self.mem_ref_fusion_layer = nn.Sequential(
             nn.Linear(self.memory_dim + self.ref_context_dim, self.memory_dim),
             nn.ReLU()
@@ -194,21 +197,20 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         """
         n_seq = lstm_states[0].shape[1]
         
-
         batch_size = features.shape[0]
         memory_indices, cur_features, ref_features = self.mem_cur_ref_split(features)
-        memoryraw = th.from_numpy(retrieve_memory(memory_indices, filename = "rl/memory.h5")).to(self.device)
-        if batch_size == 1:
-            print(cur_features)
-            print(memoryraw)
 
-        m1 = self.memory_projector(memoryraw[:, 0, :].squeeze(dim = 1).float()) * th.ones((batch_size, self.memory_dim)) * self.memory_discount_factor
-        m2 = self.memory_projector(memoryraw[:, 1, :].squeeze(dim = 1).float()) * th.ones((batch_size, self.memory_dim)) * (1 - self.memory_discount_factor) * self.memory_discount_factor
-        m3 = self.memory_projector(memoryraw[:, 2, :].squeeze(dim = 1).float()) * th.ones((batch_size, self.memory_dim)) * (1 - self.memory_discount_factor) ** 2 * self.memory_discount_factor
+        ref_features = self.ref_encoder(ref_features) # ref features for both memory concatenation and 
 
-        mem_features = m1 + m2 + m3
 
-        ref_features = self.ref_encoder(ref_features)
+        memoryraw = th.from_numpy(retrieve_memory(memory_indices, filename = self.memory_file)).to(self.device)
+
+        m1 = self.memory_projector(memoryraw[:, 0, :].squeeze(dim = 1).float())
+        m2 = self.memory_projector(memoryraw[:, 1, :].squeeze(dim = 1).float())
+        m3 = self.memory_projector(memoryraw[:, 2, :].squeeze(dim = 1).float()) 
+
+        weights = th.softmax(self.memory_gate, dim=0)
+        mem_features = weights[0] * m1 + weights[1] * m2 + weights[2] * m3
 
         lstm_output, lstm_states = lstm(
             cur_features.permute(1, 0).unsqueeze(2), 
