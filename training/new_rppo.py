@@ -3,9 +3,7 @@
 
 import gymnasium
 from gymnasium import spaces
-from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
-from sb3_contrib import RecurrentPPO
 import numpy as np
 from typing import Optional
 import json
@@ -17,6 +15,7 @@ from utils.midi_utils import write_midi_from_timings
 from utils.files import save_model
 from utils.lstm_augmented import create_augmented_sequence_with_flags
 from rl.custom_network import CustomRPPO
+from rl.memory import initialize_memory_file, store_memory, memory_noise
 
 
 
@@ -24,33 +23,25 @@ class MusicAccompanistEnv(gymnasium.Env):
     """
     Observations: A sliding window of historical data plus a future reference timing.
     """
-    def __init__(self, data, windows, config_file, option):
+    def __init__(self, data, windows, window_size, option, write_to_memory = False):
         super(MusicAccompanistEnv, self).__init__()
         self.data = data 
         self.n_notes = self.data.shape[1]
         self.option = option
 
-        with open(config_file, 'r') as f:
-            self.config = json.load(f)
-
-        self.window_size = self.config['window_size']
+        self.window_size = window_size
         self.windows = windows
         self.current_index = self.window_size
-        
-        # Create a Dict observation space with separate components for historical data and future reference
-        # This better aligns with how TempoPredictor processes the data
+        self.write_to_memory = write_to_memory
+
         if option in ["difference", "2row_with_ratio", "ratio", "normalized_reference"]:
             self.observation_space = spaces.Box(low=0, high=10.0, shape=(self.window_size * 2 - 1,), dtype=np.float32)
-        elif option == "memory_enhanced":
-            self.observation_space = spaces.Box(low=0, high=5.0, shape=(self.window_size * 2,), dtype=np.float32)
         elif option == "raw":
             flat_dim = 2 * self.window_size + 1
             self.observation_space = spaces.Box(low=0, high=30.0, shape=(flat_dim,), dtype=np.float32)
         else:
-            # Default for other options
-            hist_shape = (2, self.window_size)
             flat_dim = 2 * self.window_size 
-            self.observation_space = spaces.Box(low=0, high=10.0, shape=(flat_dim,), dtype=np.float32)
+            self.observation_space = spaces.Box(low=0, high=5.0, shape=(flat_dim,), dtype=np.float32)
         
         self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
         self.forecast_window = 3
@@ -69,7 +60,6 @@ class MusicAccompanistEnv(gymnasium.Env):
                 # Flatten for model compatibility
                 return next_window
                 
-
             case "difference":
                 # Historical data: differences between consecutive time steps
                 first_note = self.data[:, self.current_index - self.window_size:self.current_index - 1].astype(np.float32)
@@ -176,18 +166,22 @@ class MusicAccompanistEnv(gymnasium.Env):
         # Extract the current reference and soloist timing
         ref_timing = self.data[1, self.current_index] - self.data[1, self.current_index - 1]
         solo_timing = self.data[0, self.current_index] - self.data[0, self.current_index - 1]
-
-        # base_scale_prep = self.data[:, self.current_index - self.window_size + 1] - self.data[:, self.current_index - self.window_size]
-        # base_scale = base_scale_prep[0] / (base_scale_prep[1] + 1e-8)
         predicted_log_speed = action[0]
 
         speed_factor = np.exp(predicted_log_speed)
 
         predicted_timing = ref_timing * speed_factor # * base_scale
 
-
-        # reward = self.reward_function(predicted_timing, solo_timing, action[0])
         reward = self.new_reward_function(solo_timing, ref_timing, action[0])
+
+        if self.write_to_memory:
+            obs = self.obs_prep(False)
+            first_note = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)
+            second_note = self.data[:, self.current_index - self.window_size + 1:self.current_index + 1].astype(np.float32)
+            memory = second_note - first_note
+            memory = memory[0] / (memory[1] + 1e-8)
+            new_obs = memory_noise(memory, 0.1)
+            store_memory(piece_index = self.current_index - self.window_size, memory_vector= new_obs, filename = "rl/memory.h5")
         
         self.current_index += 1
         if self.windows == 'all':
@@ -301,24 +295,34 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a model to accompany a soloist.')
     parser.add_argument('--traintest', '-t', type=str, help='1 to train, 2 to test', required=True)
     parser.add_argument('--output_midi_file', '-o', type=str, help='output midi file', default = "../assets/adjusted_output.mid")
+    parser.add_argument("--memory_reset", action="store_true", help="Run a dangerous operation")
     args = parser.parse_args()
 
-    date = "0316"
+    if args.memory_reset:
+        confirm = input("Are you sure you want to delete the memory? (y/N): ")
+        if confirm.lower() not in ['y', 'yes']:
+            print("Operation cancelled.")
+            exit(1)
+        initialize_memory_file("rl/memory.h5")
+        print("Memory reset successful.")
+
+    date = "0318"
     model_number = "01"
     window_size = 7
 
     data = prepare_tensor("../assets/real_chopin.mid", "../assets/reference_chopin.mid")
+    fed_data = data[1:, :] # Remove the pitches for now
 
     
     # Uncomment these lines to train/save the model if needed.
     if args.traintest == '1':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "memory_enhanced")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(fed_data, 'all', window_size, "memory_enhanced", write_to_memory=True)])
         agent = RecurrentPPOAgent(env)
         agent.learn(total_timesteps=100000, log_interval=10, verbose=1)
         agent.save(save_model(date, model_number))
 
     elif args.traintest == '2':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "memory_enhanced")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(fed_data, 'all', window_size, "memory_enhanced", write_to_memory=False)])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
@@ -326,14 +330,14 @@ if __name__ == "__main__":
         write_midi_from_timings(predicted_timings, data[0, :], window_size, output_midi_file="../assets/adjusted_output.mid", default_duration=0.3)
     
     elif args.traintest == '3':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], [277, 330], "rppoconfig.json", "2row_with_ratio")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(fed_data, [277, 330], window_size, "2row_with_ratio")])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
         episodes_timings = test_trained_agent(agent, env, n_episodes=1)
         predicted_timings = episodes_timings[0]
     
     elif args.traintest == '4':
-        env = DummyVecEnv([lambda: MusicAccompanistEnv(data[1:, :], 'all', "rppoconfig.json", "2row_with_ratio")])
+        env = DummyVecEnv([lambda: MusicAccompanistEnv(fed_data, 'all', window_size, "2row_with_ratio")])
         agent = RecurrentPPOAgent(env)
         agent.model = agent.model.load(f"../models/{date}/{date}_{model_number}")
 

@@ -50,11 +50,17 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         enable_critic_lstm: bool = True,
         lstm_kwargs: Optional[dict[str, Any]] = None,
         lstm_features: int = 7,
+        memory_dim: int = 64,
+        memory_discount_factor: float = 0.9,
+        ref_context_dim: int = 32,
         training_mode: str = 'init', # 'init' means background training, 'live' means app feature training, 'test' means evaluation
     ):
         self.lstm_features = lstm_features
         self.lstm_output_dim = lstm_hidden_size
         self.training = training_mode
+        self.memory_dim = memory_dim
+        self.memory_discount_factor = memory_discount_factor
+        self.ref_context_dim = ref_context_dim
 
         super().__init__(
             observation_space,
@@ -84,9 +90,8 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         self.lstm_kwargs = lstm_kwargs or {}
         self.shared_lstm = shared_lstm
         self.enable_critic_lstm = enable_critic_lstm
-        # self.features_dim = 14
         self.lstm_actor = nn.LSTM(
-            2, # remove the future reference
+            1, # remove the future reference
             lstm_hidden_size,
             num_layers=n_lstm_layers,
             **self.lstm_kwargs,
@@ -113,30 +118,52 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         # Use a separate LSTM for the critic
         if self.enable_critic_lstm:
             self.lstm_critic = nn.LSTM(
-                2,
+                1,
                 lstm_hidden_size,
                 num_layers=n_lstm_layers,
                 **self.lstm_kwargs,
             )
+        self.ref_encoder = nn.Sequential(
+            nn.Linear(7, self.ref_context_dim),
+            nn.ReLU(),
+        )
+        self.memory_projector = nn.Linear(7, self.memory_dim)
+        self.mem_ref_fusion_layer = nn.Sequential(
+            nn.Linear(self.memory_dim + self.ref_context_dim, self.memory_dim),
+            nn.ReLU()
+        )
+        self.cur_ref_fusion_layer = nn.Sequential(
+            nn.Linear(lstm_hidden_size + self.ref_context_dim, lstm_hidden_size),
+            nn.ReLU()
+        )
 
         self.future_feature_proj = nn.Sequential(
             nn.Linear(1, 16),
             nn.ReLU(),
             nn.Linear(16, 16)
         )
+
         self.post_concat_layer = nn.Sequential(
-            nn.Linear(lstm_hidden_size + 16, lstm_hidden_size),
+            nn.Linear(lstm_hidden_size + self.memory_dim, lstm_hidden_size),
             nn.ReLU()
         )
+
+        # self.post_concat_layer = nn.Sequential(
+        #     nn.Linear(lstm_hidden_size + 16, lstm_hidden_size),
+        #     nn.ReLU()
+        # )
         # Setup optimizer with initial learning rate
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
 
-    def obs_split(self, obs):
+    def split_end(self, obs):
         return obs[:, :-1], obs[:, -1]
     
-    def obs_split_with_memory_index(self, obs):
-        return obs[:, 0], obs[:, 1:-1], obs[:, -1]
+    def split_begin(self, obs):
+        return obs[:, 0], obs[:, 1:]
+    
+    def mem_cur_ref_split(self, obs):
+        return obs[:, 0], obs[:, 1:7], obs[:, 7:]
     
     def set_training_mode(self, mode):
         if mode == True:
@@ -166,37 +193,58 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         :return: LSTM output and updated LSTM states.
         """
         n_seq = lstm_states[0].shape[1]
-
-
-        # if th.all(episode_starts == 0.0):
-
-            # lstm states should be [1, 2, 64] or [1, 1, 64]
-
         
-        # features, future_feature = self.obs_split(features)
-        memory_indices, features, future_feature = self.obs_split_with_memory_index(features)
-        memory_features = retrieve_memory(memory_indices, filename = "rl/memory.h5")
-        print(memory_features)
 
-        features = features.view(-1, 2, 6)
-        features = features.permute(2, 0, 1)
+        batch_size = features.shape[0]
+        memory_indices, cur_features, ref_features = self.mem_cur_ref_split(features)
+        memoryraw = th.from_numpy(retrieve_memory(memory_indices, filename = "rl/memory.h5")).to(self.device)
+
+
+        m1 = self.memory_projector(memoryraw[:, 0, :].squeeze(dim = 1).float()) * th.ones((batch_size, self.memory_dim)) * self.memory_discount_factor
+        m2 = self.memory_projector(memoryraw[:, 1, :].squeeze(dim = 1).float()) * th.ones((batch_size, self.memory_dim)) * (1 - self.memory_discount_factor) * self.memory_discount_factor
+        m3 = self.memory_projector(memoryraw[:, 2, :].squeeze(dim = 1).float()) * th.ones((batch_size, self.memory_dim)) * (1 - self.memory_discount_factor) ** 2 * self.memory_discount_factor
+
+        mem_features = m1 + m2 + m3
+
+        ref_features = self.ref_encoder(ref_features)
+
         lstm_output, lstm_states = lstm(
-            features, 
+            cur_features.permute(1, 0).unsqueeze(2), 
             (
                 (1.0 - episode_starts).view(1, n_seq, 1) * lstm_states[0],
                 (1.0 - episode_starts).view(1, n_seq, 1) * lstm_states[1],
             )
         )
-        hidden_last = lstm_output[-1]
-        future_feature = self.future_feature_proj(future_feature.unsqueeze(1))
+        cur_features = lstm_output[-1]
 
-        combined = th.cat([hidden_last, future_feature], dim=1)  
-        final_hidden = self.post_concat_layer(combined)  
+        mem_ref_features = self.mem_ref_fusion_layer(th.cat([mem_features, ref_features], dim=1))
+        cur_ref_features = self.cur_ref_fusion_layer(th.cat([cur_features, ref_features], dim=1))
+        final_hidden_features = self.post_concat_layer(th.cat([cur_ref_features, mem_ref_features], dim=1))
 
-        if self.training == 'live':
-            store_memory(memory_indices, features)
+
+        return final_hidden_features, lstm_states
+        # features, future_feature = self.split_end(features)
+
+
+        # features = features.view(-1, 2, 6)
+        # features = features.permute(2, 0, 1)
+        # lstm_output, lstm_states = lstm(
+        #     features, 
+        #     (
+        #         (1.0 - episode_starts).view(1, n_seq, 1) * lstm_states[0],
+        #         (1.0 - episode_starts).view(1, n_seq, 1) * lstm_states[1],
+        #     )
+        # )
+        # hidden_last = lstm_output[-1]
+        # future_feature = self.future_feature_proj(future_feature.unsqueeze(1))
+
+        # combined = th.cat([hidden_last, future_feature], dim=1)  
+        # final_hidden = self.post_concat_layer(combined)
+
+        # if self.training == 'live':
+        #     store_memory(memory_indices, features)
             
-        return final_hidden, lstm_states
+        # return final_hidden, lstm_states
         
 
 
