@@ -2,7 +2,15 @@ import time
 import mido
 import os
 from threading import Thread, Barrier
-from utils.midi_utils import Note
+
+class Note:
+    def __init__(self, id):
+        self.id = id
+        self.playuntil = 0
+        self.channel = 0
+        self.velocity = 0
+        self.particles = None
+        self.is_on = False
 
 class AccompanimentPlayer:
     def __init__(self):

@@ -216,6 +216,8 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
 
         weights = th.softmax(self.memory_gate, dim=0)
         mem_features = weights[0] * m1 + weights[1] * m2 + weights[2] * m3
+        mem_features[:, :] = 0.0
+
 
         lstm_output, lstm_states = lstm(
             cur_features.permute(1, 0).unsqueeze(2), 
@@ -228,7 +230,6 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
 
         mem_ref_features = self.mem_ref_fusion_layer(th.cat([mem_features, ref_features], dim=1))
         cur_ref_features = self.cur_ref_fusion_layer(th.cat([cur_features, ref_features], dim=1))
-
         if self.training_mode == 'init':
             mem_ref_features = F.dropout(mem_ref_features, p = self.memory_dropout_prob)
         final_hidden_features = self.post_concat_layer(th.cat([cur_ref_features, mem_ref_features], dim=1))

@@ -1,6 +1,6 @@
 import numpy as np
 import librosa
-from .oltw import Euclidean
+from .costs import Euclidean
 
 class OnlineTracker:
     def __init__(self, 

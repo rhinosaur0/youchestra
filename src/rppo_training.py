@@ -7,12 +7,11 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 import numpy as np
 from typing import Optional
 import argparse
-from torchsummary import summary
 
-from data_processing import prepare_tensor
-from utils.midi_utils import write_midi_from_timings
-from utils import OBS_PREP_DIC
+
+from utils.midi_utils import write_midi_from_timings, prepare_tensor
 from utils.files import save_model, save_memory
+from utils import OBS_PREP_DIC
 from rl.custom_network import CustomRPPO
 from rl.memory import initialize_memory_file, store_memory, memory_noise
 
@@ -224,7 +223,7 @@ if __name__ == "__main__":
     model_number = "03"
     window_size = 7
     windows = args.windows
-    memory_write_prob = 0.3
+    memory_write_prob = 0
 
     model_name = save_model(date, model_number)
     memory_name = save_memory(date, model_number)

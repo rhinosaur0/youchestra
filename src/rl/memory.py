@@ -11,7 +11,6 @@ def memory_noise(features, noise_std):
     return features + np.random.randn(*features.shape) * noise_std
 
 
-
 def initialize_memory_file(filename="memory.h5", num_piece_indices = 2300, max_runs = 3, obs_dim = 8):
     # Create a new HDF5 file with datasets for memories and run_ids.
     with h5py.File(filename, "w") as f:
@@ -21,7 +20,6 @@ def initialize_memory_file(filename="memory.h5", num_piece_indices = 2300, max_r
         f.create_dataset("run_ids", (num_piece_indices, max_runs), dtype="float32", 
                          data=np.full((num_piece_indices, max_runs), -np.inf, dtype="float32"))
     print(f"Initialized memory file '{filename}' with shape memories {(num_piece_indices, max_runs, obs_dim)}.")
-
 
 
 def store_memory(piece_index, memory_vector, filename="memory.h5"):
