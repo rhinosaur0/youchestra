@@ -17,12 +17,10 @@ def Euclidean(x, y):
 
 def pitch_distance(ref_pitch, perf_pitch):
     semitone_diff = abs(ref_pitch - perf_pitch) % 12
-    if semitone_diff == 0:
-        return 0  # Exact match
-    elif semitone_diff <= 2:
-        return 0.5  # Small penalty for nearby notes
+    if semitone_diff <= 1:
+        return 0.5  # Exact match
     else:
-        return 3.0  # Large penalty for outliers (hallucinations)
+        return 4.0  
 
 
 

@@ -18,12 +18,11 @@ class Conductor:
         Continuously compares the soloist's performance to the reference track
         and adjusts the accompaniment tempo.
         """
-        subdivision = 4
+        subdivision = 8
         start_time = time.time()
         time_ticker = 1
-        solo_pitch_reference = [note for note in self.solo_events[:16] if note[0] < 8 * default_sec_per_beat]
-        soloist_first_event = 0
         soloist_progression = 0
+        previous_timing = 0
         
         barrier.wait()
         while self.accomp_player.playing:
@@ -37,12 +36,11 @@ class Conductor:
             
             if latest_pitch is None or latest_pitch == 0.0:
                 continue
+
+            temp_start = time.time()
             
             # universal time of the piece progression
             accompanist_progression = self.accomp_player.retrieve_progression()
-
-            if not hasattr(self, 'cached_solo_pitch_start_time'):
-                self.cached_solo_pitch_start_time = None  # Initialize cache
 
             # update solo_pitch_history if conditions are met
             if not self.solo_pitch_history or abs(latest_pitch - self.solo_pitch_history[-1][1]) >= 1:
@@ -54,30 +52,18 @@ class Conductor:
             else:
                 continue
 
-            print(self.solo_pitch_history)
+            soloist_progression, soloist_index, timing_ratios = self.adjuster.step(np.array([time.time() - start_time, latest_pitch]))
+            if timing_ratios is not None:
+                if not self.solo_pitch_history:
+                    self.solo_pitch_history.append((round(accompanist_progression, 3), latest_pitch))
+                else:
+                    predicted_past_features = timing_ratios * (accompanist_progression - previous_timing)
+                    # print(f'predicted_past_features: {predicted_past_features}')
+                # print(time.time() - temp_start)
 
-            soloist_progression = self.adjuster.step(np.array([time.time() - start_time, latest_pitch]))
+                previous_timing = accompanist_progression
 
-            # print(self.solo_pitch_history)
-            # print(solo_pitch_reference)
-
-            # Check if the start of the solo pitch history has changed
-            # if not self.cached_solo_pitch_start_time or self.cached_solo_pitch_start_time != self.solo_pitch_history[0][0]:
-            #     self.cached_solo_pitch_start_time = self.solo_pitch_history[0][0]
-
-            #     new_window = []
-            #     i = soloist_first_event - 16
-            #     while i < 0 or self.solo_events[i][0] < soloist_progression - 8 * default_sec_per_beat: i += 1
-            #     while self.solo_events[i][0] < soloist_progression + 8 * default_sec_per_beat and i - soloist_first_event < 16:
-            #         new_window.append(self.solo_events[i])
-            #         i += 1
-            #     soloist_first_event = i
-            #     solo_pitch_reference = new_window
-
-            # soloist_progression, predicted_speed = dtw_pitch_alignment_with_speed(
-            #     self.solo_pitch_history, solo_pitch_reference, accompanist_progression
-            # )
-            print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}\n')
+            print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}, soloist index: {soloist_index}\n')
 
             # TODO - Implement tempo adjustment based on final model
 

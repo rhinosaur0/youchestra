@@ -10,6 +10,8 @@ class OnlineTracker:
                  local_cost_fun = Euclidean, 
                  start_window_size = 12):
         self.reference_features = reference_features
+        self.reference_time_features = np.array([step[0] for step in reference_features])
+        self.reference_time_features = self.reference_time_features[1:] - self.reference_time_features[:-1]
         self.last_index = len(reference_features)
         self.window_size = window_size
         self.step_size = step_size
@@ -20,6 +22,10 @@ class OnlineTracker:
         self.global_cost_matrix = (
             np.ones((len(reference_features) + 1, 2)) * np.inf
         )
+        self.global_steps_matrix = np.vstack((
+            np.arange(len(reference_features) + 1),
+            np.zeros(len(reference_features) + 1)
+        )).T
         self.input_index = 0
         self.update_window_index = False
 
@@ -28,6 +34,9 @@ class OnlineTracker:
 
 
     def get_window(self):
+        '''
+        get the window of reference features to check for OLTW
+        '''
         w_size = self.window_size
         if self.current_position < self.start_window_size:
             w_size = self.start_window_size
@@ -56,8 +65,9 @@ class OnlineTracker:
                 self.local_cost_fun(int(input_features[1]), self.reference_features[:self.window_end])
             )
             self.current_position += 1
+            note_ratio = np.array([1])
 
-            return self.reference_features[0][0]
+            return self.reference_features[0][0], self.current_position, note_ratio
         
         local_costs = self.local_cost_fun(input_features[1], self.reference_features[self.window_start:self.window_end + 1])
         min_costs, min_cost_index = float('inf'), 0
@@ -66,13 +76,17 @@ class OnlineTracker:
         while cur_checker_index < self.window_end:
             
 
-            cost1 = self.global_cost_matrix[cur_checker_index, 0] + local_costs[cur_checker_index - self.window_start]
-            cost2 = self.global_cost_matrix[cur_checker_index + 1, 0] + local_costs[cur_checker_index - self.window_start]
-            cost3 = self.global_cost_matrix[cur_checker_index, 1] + local_costs[cur_checker_index - self.window_start]
-            temp_min = min(cost1, cost2, cost3)
-            self.global_cost_matrix[cur_checker_index + 1, 1] = temp_min
+            cost1 = (self.global_cost_matrix[cur_checker_index, 0] + local_costs[cur_checker_index - self.window_start], self.global_steps_matrix[cur_checker_index, 0] + 1)
+            cost2 = (self.global_cost_matrix[cur_checker_index + 1, 0] + local_costs[cur_checker_index - self.window_start], self.global_steps_matrix[cur_checker_index + 1, 0] + 1)
+            cost3 = (self.global_cost_matrix[cur_checker_index, 1] + local_costs[cur_checker_index - self.window_start], self.global_steps_matrix[cur_checker_index, 1] + 1)
+            temp_min, temp_steps = min(cost1, cost2, cost3)
 
-            norm_cost = temp_min / (cur_checker_index - self.window_start + 1 + self.input_index)
+            self.global_cost_matrix[cur_checker_index + 1, 1] = temp_min
+            self.global_steps_matrix[cur_checker_index + 1, 1] = temp_steps
+
+            norm_cost = temp_min / temp_steps
+
+            # norm_cost = temp_min / (cur_checker_index - self.window_start + self.input_index)
 
             if norm_cost < min_costs:
                 min_costs = norm_cost
@@ -81,14 +95,27 @@ class OnlineTracker:
             cur_checker_index += 1
         
         self.global_cost_matrix[:, 0] = self.global_cost_matrix[:, 1]
-        self.global_cost_matrix[:, 1] = np.inf
+        self.global_steps_matrix[:, 0] = self.global_steps_matrix[:, 1]
+        print(self.global_steps_matrix[self.window_start:self.window_end + 1, 0])
 
-        self.current_position = self.current_position = min(
+        self.global_cost_matrix[:, 1] = np.inf
+        self.global_steps_matrix[:, 1] = 0
+        # print(self.global_cost_matrix[self.window_start:self.window_end + 1, 0])
+        
+
+
+        past_position = self.current_position
+        self.current_position = min(
             max(self.current_position, min_cost_index),
             self.current_position + self.step_size,
         )
+        print(self.current_position)
+        note_ratio = None
+        if past_position != self.current_position:
+            note_ratio = self.reference_time_features[past_position - 1:self.current_position - 1]
+            note_ratio = note_ratio / np.sum(note_ratio)
 
-        return self.reference_features[self.current_position][0]
+        return self.reference_features[self.current_position][0], self.current_position, note_ratio
 
         # for i in range(self.window_start, self.window_end):
         #     if i < self.current_position:

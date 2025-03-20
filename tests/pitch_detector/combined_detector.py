@@ -13,7 +13,7 @@ current_pitch = music21.pitch.Pitch()
 
 samplerate = 44100
 win_s = 1024
-hop_s = 128
+hop_s = 512
 tolerance = 0.2
 
 stream = p.open(format=pyaudio.paFloat32,

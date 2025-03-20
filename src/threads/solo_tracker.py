@@ -8,7 +8,7 @@ import time
 class SoloTracker:
     def __init__(self):
         self.samplerate = 44100
-        self.hop_size = 512
+        self.hop_size = 256
         self.window_size = 1024  # Adjusted buffer size for better performance
         
         self.pitch_detector = aubio.pitch("yin", self.window_size, self.hop_size, self.samplerate)
@@ -38,10 +38,8 @@ class SoloTracker:
 
             if pitch > 0 and energy > 0.015 and confidence > 0.95:
                 self.pitches.put(pitch)
-                confidence = self.pitch_detector.get_confidence()
-                self.confidences += [confidence]
                 # print(pitch, confidence)
-            time.sleep(0.0001)
+            time.sleep(0.000000000000000000001) # need this or else the other threads will not run properly
 
     def stop_listening(self):
         self.running = False
@@ -55,7 +53,6 @@ class SoloTracker:
         while not self.pitches.empty():
             raw_note = self.pitches.get_nowait()
             temp.append(round(raw_note))
-        # print(temp)
         return mode(temp) if temp else None
     
 
