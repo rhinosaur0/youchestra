@@ -33,6 +33,8 @@ min_time_gap = 0.1  # Minimum time between onsets (100ms)
 last_onset_time = None
 energy_cum = [0] * 5
 
+prev_pitch = 0
+
 # Process audio and detect onsets
 try:
     frame_count = 0
@@ -50,11 +52,12 @@ try:
 
         onset = onset_o(samples)
         current_time = frame_count * hop_s / samplerate
-        if current_energy > energy_cum[-2] + energy_threshold and pitch > 0:
+        if current_energy > energy_cum[-1] + energy_threshold and pitch > 0:
             # Suppress frequent onsets
-            if last_onset_time is None or (current_time - last_onset_time) > min_time_gap:
+            if last_onset_time is None or ((current_time - last_onset_time) > min_time_gap and abs(pitch - prev_pitch) >= 1):
                 last_onset_time = current_time
                 onset_times.append(current_time)  # Time in seconds
+                prev_pitch = pitch
                 print(pitch)
                 print(f"Onset Detected at {current_time:.2f}s with Energy {current_energy:.4f}")
 

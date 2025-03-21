@@ -19,12 +19,13 @@ class Conductor:
         and adjusts the accompaniment tempo.
         """
         subdivision = 8
-        start_time = time.time()
+
         time_ticker = 1
         soloist_progression = 0
         previous_timing = 0
         
         barrier.wait()
+        start_time = time.time()
         while self.accomp_player.playing:
             # prevents excessive tracking
             # this ensures that the pitches detected are mostly accurate and normalized, hopefully eliminating outliers
@@ -33,24 +34,22 @@ class Conductor:
 
             time_ticker += 1
             latest_pitch = self.solo_tracker.get_latest_pitch()
+            # universal time of the piece progression
+            accompanist_progression = self.accomp_player.retrieve_progression()
+            # print(latest_pitch)
             
             if latest_pitch is None or latest_pitch == 0.0:
                 continue
 
-            temp_start = time.time()
-            
-            # universal time of the piece progression
-            accompanist_progression = self.accomp_player.retrieve_progression()
-
             # update solo_pitch_history if conditions are met
-            if not self.solo_pitch_history or abs(latest_pitch - self.solo_pitch_history[-1][1]) >= 1:
-                self.solo_pitch_history.append((round(time.time() - start_time, 2), latest_pitch))
-                self.solo_pitch_history = [
-                    item for item in self.solo_pitch_history
-                    if item[0] + default_sec_per_beat * 4 >= accompanist_progression
-                ]
-            else:
-                continue
+            # if not self.solo_pitch_history or abs(latest_pitch - self.solo_pitch_history[-1][1]) >= 1:
+            #     self.solo_pitch_history.append((round(time.time() - start_time, 2), latest_pitch))
+            #     self.solo_pitch_history = [
+            #         item for item in self.solo_pitch_history
+            #         if item[0] + default_sec_per_beat * 4 >= accompanist_progression
+            #     ]
+            # else:
+            #     continue
 
             soloist_progression, soloist_index, timing_ratios = self.adjuster.step(np.array([time.time() - start_time, latest_pitch]))
             if timing_ratios is not None:

@@ -96,7 +96,7 @@ class OnlineTracker:
         
         self.global_cost_matrix[:, 0] = self.global_cost_matrix[:, 1]
         self.global_steps_matrix[:, 0] = self.global_steps_matrix[:, 1]
-        print(self.global_steps_matrix[self.window_start:self.window_end + 1, 0])
+        # print(self.global_steps_matrix[self.window_start:self.window_end + 1, 0])
 
         self.global_cost_matrix[:, 1] = np.inf
         self.global_steps_matrix[:, 1] = 0
@@ -109,7 +109,7 @@ class OnlineTracker:
             max(self.current_position, min_cost_index),
             self.current_position + self.step_size,
         )
-        print(self.current_position)
+        # print(self.current_position)
         note_ratio = None
         if past_position != self.current_position:
             note_ratio = self.reference_time_features[past_position - 1:self.current_position - 1]
