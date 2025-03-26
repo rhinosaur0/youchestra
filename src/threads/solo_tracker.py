@@ -31,7 +31,7 @@ class SoloTracker:
         energy = np.sqrt(np.mean(samples**2))
         if pitch > 0 and energy > 0.015 and confidence > 0.95:
             self.pitches.put(pitch)
-            print(f"Detected pitch: {pitch:.2f} (Confidence: {confidence:.2f})")
+            # print(f"Detected pitch: {pitch:.2f} (Confidence: {confidence:.2f})")
         return (None, pyaudio.paContinue)
 
     def start_listening(self, barrier):

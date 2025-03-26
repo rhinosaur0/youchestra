@@ -3,14 +3,20 @@ import numpy as np
 from score_tracking.online_tracking import dtw_pitch_alignment_with_speed, OnlineTracker
  
 class Conductor:
-    def __init__(self, solo_events, accomp_player, solo_tracker):
+    def __init__(self, solo_events, accomp_player, solo_tracker, adjuster = 'oltw'):
         self.solo_events = solo_events
         self.accomp_player = accomp_player
         self.solo_tracker = solo_tracker
         self.current_solo_index = 0
         self.solo_pitch_history = []
+        self.prev_index = 0
+        self.prev_pitch = 0
 
-        self.adjuster = OnlineTracker(self.solo_events)
+
+        if adjuster == 'oltw':
+            self.adjuster = OnlineTracker(self.solo_events)
+        elif adjuster == 'hmm':
+            raise NotImplementedError('HMM not implemented yet')
         
 
     def start(self, barrier, default_sec_per_beat):
@@ -34,36 +40,30 @@ class Conductor:
 
             time_ticker += 1
             latest_pitch = self.solo_tracker.get_latest_pitch()
-            # universal time of the piece progression
             accompanist_progression = self.accomp_player.retrieve_progression()
-            # print(latest_pitch)
             
-            if latest_pitch is None or latest_pitch == 0.0:
+            if latest_pitch is None or latest_pitch == 0.0 or latest_pitch == self.prev_pitch:
                 continue
 
-            # update solo_pitch_history if conditions are met
-            # if not self.solo_pitch_history or abs(latest_pitch - self.solo_pitch_history[-1][1]) >= 1:
-            #     self.solo_pitch_history.append((round(time.time() - start_time, 2), latest_pitch))
-            #     self.solo_pitch_history = [
-            #         item for item in self.solo_pitch_history
-            #         if item[0] + default_sec_per_beat * 4 >= accompanist_progression
-            #     ]
-            # else:
-            #     continue
 
             soloist_progression, soloist_index, timing_ratios = self.adjuster.step(np.array([time.time() - start_time, latest_pitch]))
+            # print(timing_ratios)
             if timing_ratios is not None:
-                if not self.solo_pitch_history:
-                    self.solo_pitch_history.append((round(accompanist_progression, 3), latest_pitch))
-                else:
-                    predicted_past_features = timing_ratios * (accompanist_progression - previous_timing)
+                print('hi')
+                # if not self.solo_pitch_history:
+                #     self.solo_pitch_history.append((round(accompanist_progression, 3), latest_pitch))
+                # else:
+                predicted_past_features = timing_ratios * (accompanist_progression - previous_timing)
+                if predicted_past_features is not None:
+                    print(predicted_past_features, soloist_index)
                     # print(f'predicted_past_features: {predicted_past_features}')
                 # print(time.time() - temp_start)
 
-                previous_timing = accompanist_progression
+            previous_timing = accompanist_progression
+            self.prev_pitch = latest_pitch
 
-            print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}, soloist index: {soloist_index}')
-            print(f'note played: {self.solo_events[soloist_index]}\n')
+            # print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}, soloist index: {soloist_index}')
+            # print(f'note played: {self.solo_events[soloist_index]}\n')
             # TODO - Implement tempo adjustment based on final model
 
 

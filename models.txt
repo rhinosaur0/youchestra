@@ -1,0 +1,59 @@
+0319_03 - Added dropout layers to memory, instantly lot better (memory dependent -160 reward, raw lstm -634 reward)
+0319_01 - Trainable parameters for memory, -123 reward, but lstms are now not contributing at all (-1500 reward)
+
+0318_01 - Extracted reference feature separately and also added in memory. lowest error ever, -337
+
+0316_01 - Cleaned the data, I think the performance is peaking for lstm alones (-467). time to add memory
+
+0315_10 - Ratio, reward -641, shitty
+0315_09 - Difference, reward -531.8, no extra feature
+0315_08 - Difference, reward -500.7, extra feature added
+0315_02 - Difference, transition is very smooth between tempo changes, first time 
+0315_01 - Ratio, reward is -489, which is the lowest yet 
+
+0314_01 - Completely fixed the sb3 issue with states
+
+0313_01 - tried ratio, pretty good
+
+0312_03 - fixed the reshaping. Results very good!!! still a little below the raw 14 features, but definitely learning a lot now
+0312_02 - legacy 14 features
+0312_01 - difference features, removed the extra feature layers to see functionality of new lstm
+
+0311_01 - first correct implementation of custom LSTM
+
+0310_03 - difference
+0310_02 - 5 * reward
+0310_01 - custom LSTM, not working that well to begin with with raw
+
+0309_03 - new reward function, log scaled (2row_with_ratio) (highest reward yet)
+0309_02 - (2, window_size) to (window_size, 2) for lstm
+0309_01 - Forecasting window (did not work)
+
+0308_07 - window size 7 but using ratio towards the reference 
+0308_06 - window size 12
+0308_05 - Scaled action with 20*log
+0308_04 - Scaled action 
+0308_03 - Window size 10
+0308_02 - No improvement
+0308_01 - Not that much improvement with the added reward functions of smoothing out
+
+0307_01 - Not that much improvement with 15 * log
+
+0306_01 - Better performance with more timesteps (200,000)
+
+0305_01 - 50,000 training steps on adding next window, except this time as 2 * windows with the opposite cell 0.
+          Much better performance in speed bumps
+
+0302_03 - 200,000 training steps, -1341 reward total using 5 * log
+0302_02 - 1row+next using below configs
+0302_01 - same window space, 5 * reward function
+
+0301_01 - (windowspace * 2 + 1), bounded observation boxes
+
+0220_05 - concatenated the two rows, the tempo is much better than previous models but it can't detect the speedup
+0220_04 - removed the extra window, it's now detecting the speedup when it's supposed to.
+0220_03 - fixed the window size misalignment
+0220_02 - window size 10
+0220_01 - 3xN obsservation, with the last row being the next reference note, window size 6
+
+0216 - 2xN observation

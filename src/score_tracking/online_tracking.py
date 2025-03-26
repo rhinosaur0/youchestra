@@ -1,6 +1,6 @@
 import numpy as np
 import librosa
-from .costs import Euclidean
+from .costs import cost
 
 class OnlineTracker:
     '''
@@ -10,7 +10,7 @@ class OnlineTracker:
                  reference_features = None, 
                  window_size = 16, 
                  step_size = 5, 
-                 local_cost_fun = Euclidean, 
+                 local_cost_fun = cost, 
                  start_window_size = 12):
         self.reference_features = reference_features
         self.reference_time_features = np.array([step[0] for step in reference_features])
@@ -64,13 +64,14 @@ class OnlineTracker:
         
         if self.current_position == 0:
             self.global_cost_matrix[0, 0] = 0
-            self.global_cost_matrix[1:self.window_end + 1, 0] = np.cumsum(
-                self.local_cost_fun(int(input_features[1]), self.reference_features[:self.window_end])
-            )
-            self.current_position += 1
-            note_ratio = np.array([1])
+        #     self.global_cost_matrix[1:self.window_end + 1, 0] = np.cumsum(
+        #         self.local_cost_fun(int(input_features[1]), self.reference_features[:self.window_end])
+        #     )
+        #     self.current_position += 1
+        #     note_ratio = np.array([1])
+        #     print('hi')
 
-            return self.reference_features[0][0], self.current_position, note_ratio
+        #     return self.reference_features[0][0], self.current_position, note_ratio
         
         local_costs = self.local_cost_fun(input_features[1], self.reference_features[self.window_start:self.window_end + 1])
         min_costs, min_cost_index = float('inf'), 0
@@ -87,9 +88,9 @@ class OnlineTracker:
             self.global_cost_matrix[cur_checker_index + 1, 1] = temp_min
             self.global_steps_matrix[cur_checker_index + 1, 1] = temp_steps
 
-            norm_cost = temp_min / temp_steps
+            # norm_cost = temp_min / ()
 
-            # norm_cost = temp_min / (cur_checker_index - self.window_start + self.input_index)
+            norm_cost = temp_min / (cur_checker_index - self.window_start + self.input_index)
 
             if norm_cost < min_costs:
                 min_costs = norm_cost
@@ -103,7 +104,8 @@ class OnlineTracker:
 
         self.global_cost_matrix[:, 1] = np.inf
         self.global_steps_matrix[:, 1] = 0
-        # print(self.global_cost_matrix[self.window_start:self.window_end + 1, 0])
+        print(self.global_cost_matrix[self.window_start:self.window_end + 1, 0])
+        # print('\n')
         
 
 
@@ -115,8 +117,11 @@ class OnlineTracker:
         # print(self.current_position)
         note_ratio = None
         if past_position != self.current_position:
-            note_ratio = self.reference_time_features[past_position - 1:self.current_position - 1]
+            # print(self.current_position)
+            note_ratio = self.reference_time_features[past_position:self.current_position]
             note_ratio = note_ratio / np.sum(note_ratio)
+
+
 
         return self.reference_features[self.current_position][0], self.current_position, note_ratio
 

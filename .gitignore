@@ -2,7 +2,7 @@
 
 installation.txt
 notes.txt
-models.txt
+# models.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -176,5 +176,5 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 training_data/
-*.zip
-*.h5
+# *.zip
+# *.h5

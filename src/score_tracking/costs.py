@@ -1,24 +1,25 @@
 import numpy as np
 
-def Euclidean(x, y):
+def cost(x, y):
     '''
     X is the pitch.
     Y is the reference pitches
     '''
     result = np.array([])
-    for _, notes, _ in y:
+    for a, (_, notes, _) in enumerate(y):
         if len(notes) >= 1:
-            result = np.append(result, np.min([pitch_distance(x, note) for note in notes])) # in the case that there are multiple notes,
+            result = np.append(result, np.min([pitch_distance(x, note, a) for note in notes])) # in the case that there are multiple notes,
                                                                                             # use the smallest distance
         else:
             result = np.append(result, pitch_distance(x, notes[0]))
 
     return result
 
-def pitch_distance(ref_pitch, perf_pitch):
+def pitch_distance(ref_pitch, perf_pitch, index_of_oltw):
+
     semitone_diff = abs(ref_pitch - perf_pitch) % 12
     if semitone_diff <= 1:
-        return 0.5  # Exact match
+        return semitone_diff  # Exact match
     else:
         return 4.0  
 
