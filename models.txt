@@ -55,5 +55,3 @@
 0220_03 - fixed the window size misalignment
 0220_02 - window size 10
 0220_01 - 3xN obsservation, with the last row being the next reference note, window size 6
-
-0216 - 2xN observation
