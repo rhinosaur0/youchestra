@@ -8,8 +8,8 @@ import time
 
 class SoloTracker:
     '''
-    Audio callback is crucial for both ensuring that the accompanist runs smoothly on its thread while also not having any delays in 
-    pitch detection.
+    Pyaudio's audio callback is crucial for both ensuring that the accompanist runs smoothly on its thread 
+    while also not having any delays in pitch detection.
     '''
     def __init__(self):
         self.samplerate = 44100

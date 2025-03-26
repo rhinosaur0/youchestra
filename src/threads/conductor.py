@@ -3,6 +3,10 @@ import numpy as np
 from score_tracking.online_tracking import dtw_pitch_alignment_with_speed, OnlineTracker
  
 class Conductor:
+    '''
+    Tracks the soloist's history and sends signal to accompanist to adjust tempo
+    '''
+
     def __init__(self, solo_events, accomp_player, solo_tracker, adjuster = 'oltw'):
         self.solo_events = solo_events
         self.accomp_player = accomp_player

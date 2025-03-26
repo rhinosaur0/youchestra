@@ -202,9 +202,7 @@ def test_trained_agent(agent, env, n_episodes=1):
     return episodes_timings
 
 
-# ----------------------------
-# Main Testing Script
-# ----------------------------
+
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description='Train a model to accompany a soloist.')

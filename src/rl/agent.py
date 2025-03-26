@@ -4,6 +4,10 @@ from .custom_network import CustomRPPO
 
 
 class RecurrentPPOAgent:
+    '''
+    Wraps the CustomRPPO model to provide a predict method.
+    '''
+
     def __init__(self, env, file_path: Optional[str] = None):
         self.file_path = file_path
         self.lstm_states = None

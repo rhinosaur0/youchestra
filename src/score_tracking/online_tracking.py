@@ -125,29 +125,6 @@ class OnlineTracker:
 
         return self.reference_features[self.current_position][0], self.current_position, note_ratio
 
-        # for i in range(self.window_start, self.window_end):
-        #     if i < self.current_position:
-        #         continue
-        #     if i == self.window_start:
-        #         self.global_cost_matrix[0, 1] = self.global_cost_matrix[0, 0] + self.local_cost_fun(
-        #             self.input_features[i], self.reference_features[0]
-        #         )
-        #     else:
-        #         self.global_cost_matrix[0, 1] = self.global_cost_matrix[0, 0] + self.local_cost_fun(
-        #             self.input_features[i], self.reference_features[0]
-        #         )
-        #         self.global_cost_matrix[1:, 1] = np.minimum(
-        #             self.global_cost_matrix[1:, 0],
-        #             np.minimum(
-        #                 self.global_cost_matrix[:-1, 0],
-        #                 self.global_cost_matrix[:-1, 1],
-        #             ),
-        #         ) + self.local_cost_fun(self.input_features[i], self.reference_features)
-        #     self.global_cost_matrix[:, 0] = self.global_cost_matrix[:, 1]
-        # self.current_position += self.step_size
-        # if self.current_position >= self.N_input:
-        #     return None
-        # return self.global_cost_matrix[-1, 0]
     
 
         
@@ -155,6 +132,8 @@ class OnlineTracker:
         
         
         
+
+
 
 
 
@@ -264,7 +243,6 @@ def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment
 
 
 
-
 def combined_distance(x, y, time_weight=1.0, pitch_weight=0.0):
     """
     Compute a weighted distance between two feature vectors x and y.
@@ -279,7 +257,7 @@ def combined_distance(x, y, time_weight=1.0, pitch_weight=0.0):
     return time_weight * time_diff + pitch_weight * pitch_diff
 
 
-
+# Testing for librosa dtw algorithm (it is not good for online alignment)
 def compute_speed_factor(soloist_features, ref_features, time_weight=1.0, pitch_weight=0.5):
     """
     Compute a speed factor by aligning the soloist and reference sequences (each as [time, pitch])

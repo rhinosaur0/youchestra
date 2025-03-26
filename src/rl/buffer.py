@@ -7,16 +7,18 @@ import torch as th
 
 
 class CustomRecurrentRolloutBuffer(RecurrentRolloutBuffer):
+
+    '''
+    This is modified from the original SB3 code to handle the custom LSTM
+    The original treats individual data as sequential data, outputting actions as if each data is a time-step
+    However, the design of the accompanist has a fixed window_length of 7, which means that the data is not sequential
+    but rather a fixed window of data. This function takes a random distribution of size batch_size from n_steps
+    '''
     def add(self, *args, lstm_states: RNNStates, **kwargs):
         super().add(*args, lstm_states = lstm_states, **kwargs)
 
     def get(self, batch_size: Optional[int] = None):
-        '''
-        This is modified from the original SB3 code to handle the custom LSTM
-        The original treats individual data as sequential data, outputting actions as if each data is a time-step
-        However, the design of the accompanist has a fixed window_length of 7, which means that the data is not sequential
-        but rather a fixed window of data. This function takes a random distribution of size batch_size from n_steps
-        '''
+
         assert self.full, "Rollout buffer must be full before sampling from it"
 
         # Prepare the data

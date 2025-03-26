@@ -13,6 +13,10 @@ class Note:
         self.is_on = False
 
 class AccompanimentPlayer:
+    '''
+    Handles accompanist playback
+    '''
+
     def __init__(self):
         self.midi_out = mido.open_output()
         self.mid = None
