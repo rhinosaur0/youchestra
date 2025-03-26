@@ -3,6 +3,9 @@ import librosa
 from .costs import Euclidean
 
 class OnlineTracker:
+    '''
+    Online tracker uses O(n) time complexity while traditional DTW uses O(n^2) time complexity (see below)
+    '''
     def __init__(self, 
                  reference_features = None, 
                  window_size = 16, 
@@ -161,6 +164,7 @@ def pitch_distance(ref_pitch, perf_pitch):
         return 3.0  # Large penalty for outliers (hallucinations)
 
 
+#LEGACY dtw
 def dtw_pitch_alignment_with_speed(pitch_history, pitch_reference, accompaniment_progress, pitch_threshold=12):
 
     predicted_speed = 1.0

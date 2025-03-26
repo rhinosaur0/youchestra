@@ -124,3 +124,4 @@ def forecast(data, current_index, window_size, forecast_window):
 
     obs = create_augmented_sequence_with_flags(next_window_real[0], next_window_ref[0], forecast_window).flatten()
     return obs
+

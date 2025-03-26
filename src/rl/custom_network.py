@@ -23,8 +23,23 @@ from .buffer import CustomRecurrentRolloutBuffer
 from .memory import retrieve_memory, store_memory
 
 
+def split_end(obs):
+    return obs[:, :-1], obs[:, -1]
+
+def split_begin(obs):
+    return obs[:, 0], obs[:, 1:]
+
+def mem_cur_ref_split(obs):
+    return obs[:, 0], obs[:, 1:7], obs[:, 7:]
+
 class CustomRecurrentACP(RecurrentActorCriticPolicy):
 
+    '''
+    Stablebaseline RecurrentActorCriticPolicy processes sequential data across different time steps, which is not what we want.
+    We need the LSTM to unroll across the different timestamps across a fixed window size, and treat time steps as different batches
+
+    Includes memory feature (for the accompanist to remember how the soloist played a certain part the previous time)
+    '''
     def __init__(
         self,
         observation_space: spaces.Space,
@@ -159,16 +174,6 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         # )
         # Setup optimizer with initial learning rate
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
-
-
-    def split_end(self, obs):
-        return obs[:, :-1], obs[:, -1]
-    
-    def split_begin(self, obs):
-        return obs[:, 0], obs[:, 1:]
-    
-    def mem_cur_ref_split(self, obs):
-        return obs[:, 0], obs[:, 1:7], obs[:, 7:]
     
     def set_training_mode(self, mode):
 
@@ -203,7 +208,7 @@ class CustomRecurrentACP(RecurrentActorCriticPolicy):
         n_seq = lstm_states[0].shape[1]
         
         batch_size = features.shape[0]
-        memory_indices, cur_features, ref_features = self.mem_cur_ref_split(features)
+        memory_indices, cur_features, ref_features = mem_cur_ref_split(features)
 
         ref_features = self.ref_encoder(ref_features) # ref features for both memory concatenation and 
 
@@ -269,7 +274,7 @@ class CustomRPPO(RecurrentPPO):
         "Custom": CustomRecurrentACP
     }
 
-    @property
+
     def get_env(self):
         return self.env
     

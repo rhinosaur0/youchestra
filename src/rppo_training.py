@@ -77,6 +77,7 @@ class MusicAccompanistEnv(gymnasium.Env):
 
         reward = self.new_reward_function(solo_timing, ref_timing, action[0])
 
+        # Randomly writes to memory to allow model to take in diverse ranges of memories
         if np.random.rand() < self.write_to_memory:
             obs = self.obs_prep(False)
             first_note = self.data[:, self.current_index - self.window_size:self.current_index].astype(np.float32)

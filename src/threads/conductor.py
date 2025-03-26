@@ -62,8 +62,8 @@ class Conductor:
 
                 previous_timing = accompanist_progression
 
-            print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}, soloist index: {soloist_index}\n')
-
+            print(f'accompanist progression: {accompanist_progression}, soloist progression: {soloist_progression}, soloist index: {soloist_index}')
+            print(f'note played: {self.solo_events[soloist_index]}\n')
             # TODO - Implement tempo adjustment based on final model
 
 
