@@ -34,8 +34,11 @@ def main(args):
         conductor_thread = threading.Thread(target=conductor.start, args = (barrier, default_sec_per_beat), daemon=True)
         conductor_thread.start()
 
-        while playback_thread.is_alive() and conductor_thread.is_alive():
+        while playback_thread.is_alive() and conductor_thread.is_alive() and not solo_tracker.plot:
             time.sleep(0.05)
+
+        solo_tracker.plot_debug_data()
+
 
     except KeyboardInterrupt:
         print("Stopping...")

@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import aubio
 import pyaudio
+import time
 
 # PyAudio setup
 p = pyaudio.PyAudio()
@@ -11,86 +12,112 @@ stream = p.open(format=pyaudio.paFloat32,
 
 # Aubio setup
 samplerate = 44100
-win_s = 1024  # Larger window size for lower frequency detection
-hop_s = 256  # Larger hop size to analyze less frequently
+win_s = 1024
+hop_s = 256
 
-# Onset detector
-onset_o = aubio.onset("default", win_s, hop_s, samplerate)
-pitch_o = aubio.pitch("default", win_s, hop_s, samplerate)
-onset_o.set_threshold(1.0)  # Adjust threshold for reduced sensitivity
-pitch_o.set_tolerance(0.4)
-pitch_o.set_unit("midi")
-# Storage for PCM data and energy
-pcm_data = []  # To store audio samples
-onset_times = []  # To store detected onset times
-time_stamps = []  # To track time for each frame
-energy_values = []  # To store energy levels
+# Create onset detector with both energy and spectral diff for comparison
+onset_energy = aubio.onset("energy", win_s, hop_s, samplerate)
+onset_specdiff = aubio.onset("specflux", win_s, hop_s, samplerate)
+# Set thresholds
+onset_energy.set_threshold(1.5)
+onset_specdiff.set_threshold(0.1)
 
-# Variables for energy comparison
-prev_energy = 0
-energy_threshold = 0.005  # Larger minimum increase in energy to consider an onset
-min_time_gap = 0.1  # Minimum time between onsets (100ms)
-last_onset_time = None
-energy_cum = [0] * 5
+prev_onset = time.time()
 
-prev_pitch = 0
+# Storage for values
+energy_values = []
+specdiff_values = []
+onset_energy_times = []
+onset_specdiff_times = []
+time_stamps = []
+energy_velocities = []
+specdiff_velocities = []
 
-# Process audio and detect onsets
+# Get the underlying onset detection function values
 try:
     frame_count = 0
-    while frame_count < 1000:  # Collect 100 frames (~2 seconds of audio)
+    prev_energy = 0
+    prev_specdiff = 0
+    prev_time = 0
+    
+    while frame_count < 4000:
         data = stream.read(hop_s, exception_on_overflow=False)
         samples = np.fromstring(data, dtype=aubio.float_type)
-        pitch = pitch_o(samples)[0]
-
-        # Append PCM data
-        pcm_data.extend(samples)
-
-        # Calculate RMS energy
-        current_energy = np.sqrt(np.mean(samples**2))
-        energy_values.append(current_energy)
-
-        onset = onset_o(samples)
+        
         current_time = frame_count * hop_s / samplerate
-        if current_energy > energy_cum[-1] + energy_threshold and pitch > 0:
-            # Suppress frequent onsets
-            if last_onset_time is None or ((current_time - last_onset_time) > min_time_gap and abs(pitch - prev_pitch) >= 1):
-                last_onset_time = current_time
-                onset_times.append(current_time)  # Time in seconds
-                prev_pitch = pitch
-                print(pitch)
-                print(f"Onset Detected at {current_time:.2f}s with Energy {current_energy:.4f}")
+        
+        # Get both energy and spectral difference values
+        onset_energy(samples)
+        onset_specdiff(samples)
+        
+        # Get the actual detection function values
+        energy_val = onset_energy.get_descriptor()
+        specdiff_val = onset_specdiff.get_descriptor()
+        
+        # Calculate instantaneous velocity if we have previous values
+        if frame_count > 0:
+            dt = current_time - prev_time
+            energy_velocity = (energy_val - prev_energy) / dt
+            specdiff_velocity = (specdiff_val - prev_specdiff) / dt
+            
+            # Store velocities
+            energy_velocities.append(energy_velocity)
+            specdiff_velocities.append(specdiff_velocity)
+            
+            # Detect onsets based on velocity threshold
+            if energy_velocity > 7500 and time.time() - prev_onset >= 0.1:
+                prev_onset = time.time()
+                onset_energy_times.append(current_time)
 
-        # Update previous energy
-        energy_cum.append(current_energy)
-
-        # Track time
+        else:
+            energy_velocities.append(0)
+            specdiff_velocities.append(0)
+        
+        # Store current values for next iteration
+        prev_energy = energy_val
+        prev_specdiff = specdiff_val
+        prev_time = current_time
+        
+        # Store values
+        energy_values.append(energy_val)
+        specdiff_values.append(specdiff_val)
         time_stamps.append(current_time)
-
+        
         frame_count += 1
+        
 except KeyboardInterrupt:
     pass
 finally:
-    # Clean up PyAudio
     stream.stop_stream()
     stream.close()
     p.terminate()
 
-# Convert PCM data to NumPy array
-pcm_data = np.array(pcm_data)
+# Plot the detection functions and their velocities
+plt.figure(figsize=(15, 8))
 
-# Plot the waveform and energy
-plt.figure(figsize=(12, 6))
-time_axis = np.linspace(0, len(pcm_data) / samplerate, num=len(pcm_data))
-plt.plot(time_axis, pcm_data, label="Waveform", alpha=0.7)
-plt.plot(time_stamps, energy_values, label="Energy", color="orange")
-
-# Overlay onsets
-for onset_time in onset_times:
-    plt.axvline(x=onset_time, color='r', linestyle='--', label='Onset' if onset_time == onset_times[0] else "")
-
-plt.title("Waveform with Detected Onsets (Reduced Frequency)")
-plt.xlabel("Time (s)")
-plt.ylabel("Amplitude")
+# Plot energy detection and its velocity
+plt.subplot(2, 1, 1)
+plt.plot(time_stamps, energy_values, 'b-', label='Energy Detection Function')
+plt.plot(time_stamps, energy_velocities, 'c-', label='Energy Velocity', alpha=0.7)
+plt.axhline(y=7500, color='r', linestyle='--', label='Velocity Threshold')
+for onset in onset_energy_times:
+    plt.axvline(x=onset, color='g', alpha=0.5)
+plt.title('Energy-based Onset Detection')
+plt.xlabel('Time (s)')
+plt.ylabel('Energy / Velocity')
 plt.legend()
+
+# Plot spectral difference detection and its velocity
+plt.subplot(2, 1, 2)
+plt.plot(time_stamps, specdiff_values, 'b-', label='Spectral Difference Function')
+plt.plot(time_stamps, specdiff_velocities, 'm-', label='Spectral Diff Velocity', alpha=0.7)
+plt.axhline(y=7500, color='r', linestyle='--', label='Velocity Threshold')
+for onset in onset_specdiff_times:
+    plt.axvline(x=onset, color='g', alpha=0.5)
+plt.title('Spectral Difference Onset Detection')
+plt.xlabel('Time (s)')
+plt.ylabel('Spectral Difference / Velocity')
+plt.legend()
+
+plt.tight_layout()
 plt.show()

@@ -44,22 +44,29 @@ class Conductor:
 
             time_ticker += 1
             latest_pitch = self.solo_tracker.get_latest_pitch()
+            latest_onset = self.solo_tracker.get_latest_onset()
             accompanist_progression = self.accomp_player.retrieve_progression()
             
             if latest_pitch is None or latest_pitch == 0.0 or latest_pitch == self.prev_pitch:
                 continue
 
+            if latest_onset is not None:
+                print(latest_onset)
+
+            if time.time() - start_time > 5:
+                self.solo_tracker.stop_listening()
+
 
             soloist_progression, soloist_index, timing_ratios = self.adjuster.step(np.array([time.time() - start_time, latest_pitch]))
             # print(timing_ratios)
             if timing_ratios is not None:
-                print('hi')
+                # print('hi')
                 # if not self.solo_pitch_history:
                 #     self.solo_pitch_history.append((round(accompanist_progression, 3), latest_pitch))
                 # else:
                 predicted_past_features = timing_ratios * (accompanist_progression - previous_timing)
-                if predicted_past_features is not None:
-                    print(predicted_past_features, soloist_index)
+                # if predicted_past_features is not None:
+                #     print(predicted_past_features, soloist_index)
                     # print(f'predicted_past_features: {predicted_past_features}')
                 # print(time.time() - temp_start)
 

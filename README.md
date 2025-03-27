@@ -34,7 +34,7 @@ The agent is trained using a custom Gym environment and the [RecurrentPPO](https
 - March 10th - Finished creating the environment and the training pipeline.
 - March 15th - Designed custom RPPO model architecture to accommodate for time series data (read src/rl/custom_network.py for more details)
 - March 19th - Working model (could use fine tuning), ready for integration 
-- March 25th - Online Time Warping is not accurate enough for soloist tracking due to noisy inputs from PyAudio, considering shift to Hidden Markov Model or finding better onset detection methods. 
+- March 26th - Discovered that onset detection is really accurate as long as the audio source is not the device running the script
 
 
 ## TODO
@@ -43,5 +43,5 @@ The agent is trained using a custom Gym environment and the [RecurrentPPO](https
 
 References:
 
-Hidden Markov Implementation: 
+Online Time Warping inspiration: 
 https://github.com/CPJKU/accompanion
