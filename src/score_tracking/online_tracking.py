@@ -104,7 +104,7 @@ class OnlineTracker:
 
         self.global_cost_matrix[:, 1] = np.inf
         self.global_steps_matrix[:, 1] = 0
-        print(self.global_cost_matrix[self.window_start:self.window_end + 1, 0])
+        # print(self.global_cost_matrix[self.window_start:self.window_end + 1, 0])
         # print('\n')
         
 

@@ -12,12 +12,13 @@ class SoloTracker:
     Pyaudio's audio callback is crucial for both ensuring that the accompanist runs smoothly on its thread 
     while also not having any delays in pitch detection.
     '''
-    def __init__(self, debug=False):
+    def __init__(self, debug=True):
         self.samplerate = 44100
         self.hop_size = 256
         self.window_size = 1024  # Adjust as needed for performance
         self.debug = debug
         self.plot = False
+        self.onset_threshold = 5000
         
         # Debug storage
         if self.debug:
@@ -74,7 +75,7 @@ class SoloTracker:
                 self.timestamps.append(current_time - self.start_time)
             
             # Detect onset based on velocity threshold and minimum time between onsets
-            if energy_velocity > 7500 and current_time - self.prev_onset_time >= 0.1:
+            if energy_velocity > self.onset_threshold and current_time - self.prev_onset_time >= 0.1:
                 self.prev_onset_time = current_time
                 self.onsets.put(current_time)
                 if self.debug:
@@ -145,7 +146,6 @@ class SoloTracker:
         return mode(temp) if temp else None
 
     def get_latest_onset(self):
-        """Returns the timestamp of the most recent onset, or None if no new onset"""
         return self.onsets.get_nowait() if not self.onsets.empty() else None
 
 
