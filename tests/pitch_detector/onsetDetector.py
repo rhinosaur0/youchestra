@@ -98,7 +98,7 @@ plt.figure(figsize=(15, 8))
 # Plot energy detection and its velocity
 plt.subplot(2, 1, 1)
 plt.plot(time_stamps, energy_values, 'b-', label='Energy Detection Function')
-plt.plot(time_stamps, energy_velocities, 'c-', label='Energy Velocity', alpha=0.7)
+# plt.plot(time_stamps, energy_velocities, 'c-', label='Energy Velocity', alpha=0.7)
 plt.axhline(y=7500, color='r', linestyle='--', label='Velocity Threshold')
 for onset in onset_energy_times:
     plt.axvline(x=onset, color='g', alpha=0.5)
